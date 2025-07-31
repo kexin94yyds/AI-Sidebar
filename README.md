@@ -5,6 +5,10 @@
 
 This Chrome extension integrates ChatGPT directly into your browser's side panel, allowing users to interact with ChatGPT seamlessly while browsing the web. The extension makes it convenient to access ChatGPT without opening a new tab or navigating away from the current page.
 
+## Preview
+
+<div><img src="https://i.imgur.com/ISmP3Ai.png" width="80%"></div>
+
 ## Features
 
 - **Side Panel Integration:** ChatGPT is accessible from the browser's side panel.
