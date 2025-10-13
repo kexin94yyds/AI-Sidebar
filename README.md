@@ -1,20 +1,38 @@
 
-# AI Panel Chrome Extension
+# AI Sidebar Chrome Extension 🤖
+
+<div align="center">
+  <img src="images/icon128.png" alt="AI Sidebar Logo" width="128">
+</div>
 
 ## Overview
 
-This Chrome extension integrates popular AI chat providers directly into your browser's side panel. It supports ChatGPT, Perplexity, and Gemini so you can access them without switching tabs.
+This Chrome extension integrates popular AI chat providers directly into your browser's side panel. It supports ChatGPT, Perplexity, Gemini, Claude, NotebookLM, and more, allowing you to access them without switching tabs.
 
 ## Preview
 
-<div><img src="https://i.imgur.com/ISmP3Ai.png" width="80%"></div>
+<div align="center">
+  <img src="images/screenshot.png" alt="AI Sidebar Preview" width="90%">
+</div>
 
 ## Features
 
-- **Side Panel Integration:** Access ChatGPT, Perplexity, Gemini, Claude, and NotebookLM from the side panel.
-- **Provider Switcher:** Quick dropdown to switch between providers; choice is remembered.
-- **Session Awareness (ChatGPT):** Checks ChatGPT login status and prompts if needed.
-- **Header Adjustments:** Removes `content-security-policy`/`x-frame-options` headers for supported domains to allow embedding.
+- **🎯 Side Panel Integration:** Access ChatGPT, Perplexity, Gemini, Claude, NotebookLM, IMA, and Attention Tracker from the side panel.
+- **🔄 Provider Switcher:** Quick dropdown to switch between AI providers; your choice is automatically remembered.
+- **✅ Session Awareness:** Checks login status and prompts if needed (especially for ChatGPT).
+- **🔧 Header Adjustments:** Removes `content-security-policy`/`x-frame-options` headers for supported domains to allow seamless embedding.
+- **📱 Responsive Design:** Works smoothly with all supported AI platforms.
+
+## Supported AI Providers
+
+- **ChatGPT** - OpenAI's conversational AI
+- **ChatGPT Codex** - Code-focused ChatGPT variant
+- **Perplexity** - AI-powered search engine
+- **Gemini** - Google's AI assistant
+- **Claude** - Anthropic's AI assistant
+- **NotebookLM** - Google's AI note-taking tool
+- **IMA** - Integrated AI assistant
+- **Attention Tracker** - Focus and productivity tracking
 
 ## Installation
 
