@@ -1,9 +1,9 @@
 
-# ChatGPT Panel Chrome Extension
+# AI Panel Chrome Extension
 
 ## Overview
 
-This Chrome extension integrates ChatGPT directly into your browser's side panel, allowing users to interact with ChatGPT seamlessly while browsing the web. The extension makes it convenient to access ChatGPT without opening a new tab or navigating away from the current page.
+This Chrome extension integrates popular AI chat providers directly into your browser's side panel. It supports ChatGPT, Perplexity, and Gemini so you can access them without switching tabs.
 
 ## Preview
 
@@ -11,10 +11,10 @@ This Chrome extension integrates ChatGPT directly into your browser's side panel
 
 ## Features
 
-- **Side Panel Integration:** ChatGPT is accessible from the browser's side panel.
-- **Session Authentication:** The extension checks the user's authentication status with ChatGPT and prompts login if necessary.
-- **Customizable Chat Frame:** Once authenticated, a chat frame is rendered inside the panel for easy access to ChatGPT.
-- **Header Modifications:** Automatically removes content security policy and frame options from requests to ensure ChatGPT functions properly in the panel.
+- **Side Panel Integration:** Access ChatGPT, Perplexity, Gemini, Claude, and NotebookLM from the side panel.
+- **Provider Switcher:** Quick dropdown to switch between providers; choice is remembered.
+- **Session Awareness (ChatGPT):** Checks ChatGPT login status and prompts if needed.
+- **Header Adjustments:** Removes `content-security-policy`/`x-frame-options` headers for supported domains to allow embedding.
 
 ## Installation
 
@@ -26,20 +26,23 @@ This Chrome extension integrates ChatGPT directly into your browser's side panel
 
 ## Permissions
 
-- **sidePanel:** Allows the extension to add content to the browser's side panel.
-- **declarativeNetRequest & declarativeNetRequestWithHostAccess:** Used to modify the headers of the network requests to ensure the embedded ChatGPT interface works smoothly.
+- **sidePanel:** Adds content to the side panel.
+- **declarativeNetRequest & declarativeNetRequestWithHostAccess:** Modifies headers to allow embedding.
+- **storage:** Saves your selected provider.
 
 ## How It Works
 
-1. When the extension is loaded, the side panel becomes available, showing either the ChatGPT login prompt or the chat interface.
-2. The `popup.js` file checks the user's session status and handles rendering the appropriate content inside the side panel.
-3. If the user is authenticated, an iframe displaying ChatGPT is shown.
-4. The extension modifies specific request headers to prevent `content-security-policy` and `x-frame-options` from blocking the integration.
+1. Open the side panel and choose a provider from the dropdown.
+2. For ChatGPT, the extension checks session status and shows a login prompt if necessary; for Perplexity and Gemini, it loads the site directly in the panel.
+3. The extension modifies specific request headers to prevent `content-security-policy` and `x-frame-options` from blocking the embedded pages.
 
 ## Troubleshooting
 
-- **Unauthorized or Cloudflare Error:** Ensure you are logged in to ChatGPT and have passed any security checks.
-- **Error fetching session:** This may occur if there is an issue with network connectivity. Try refreshing the panel or reloading the extension.
+- **Login screens inside the panel:** Some providers (especially Gemini/Google) may redirect to login pages like `accounts.google.com`. Header rules are added, but some flows can still refuse to render in iframes due to provider-side restrictions; in such cases, use "Open in Tab" to sign in, then return to the panel.
+- **ChatGPT 403/Cloudflare:** Open ChatGPT in a regular tab to pass checks, then the panel will load.
+- **Error fetching session:** Network hiccup; refresh the panel or reload the extension.
+
+ 
 
 ## License
 

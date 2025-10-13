@@ -3,10 +3,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>ChatGPT Panel</title>
+    <title>AI Panel</title>
     <link rel="stylesheet" href="css/panel.css" />
   </head>
   <body>
+    <div class="hover-zone"></div>
+    <div class="toolbar">
+      <label>Provider:</label>
+      <div class="dropdown" id="providerDropdown">
+        <button class="dd-toggle" id="providerToggle">
+          <span id="providerLabel">ChatGPT</span>
+          <span class="chev">▾</span>
+        </button>
+        <div class="dd-menu" id="providerMenu" style="display:none;"></div>
+      </div>
+      <a id="openInTab" href="#" target="_blank" rel="noreferrer">Open in Tab</a>
+    </div>
     <div id="iframe"></div>
     <script src="js/popup.js"></script>
   </body>

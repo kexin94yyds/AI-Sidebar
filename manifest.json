@@ -1,12 +1,18 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Panel",
+  "name": "AI Panel",
   "version": "0.0.1",
-  "description": "A Chrome extension that brings ChatGPT to your browser panel",
+  "description": "A Chrome extension that brings ChatGPT, Perplexity, and Gemini to your browser side panel",
   "permissions": [
     "sidePanel",
     "declarativeNetRequest",
-    "declarativeNetRequestWithHostAccess"
+    "declarativeNetRequestWithHostAccess",
+    "storage",
+    "identity"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "js/background.js"
@@ -20,7 +26,19 @@
     "default_path": "index.html"
   },
   "action": {
-    "default_title": "ChatGPT Panel Chrome Extension"
+    "default_title": "AI Panel Chrome Extension"
   },
-  "host_permissions": ["https://chatgpt.com/"]
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
+    "https://gemini.google.com/*",
+    "https://accounts.google.com/*",
+    "https://claude.ai/*",
+    "https://notebooklm.google.com/*",
+    "https://ima.qq.com/*",
+    "https://ssl.ptlogin2.qq.com/*",
+    "https://xui.ptlogin2.qq.com/*",
+    "https://attention-span-tracker.netlify.app/*"
+  ]
 }
