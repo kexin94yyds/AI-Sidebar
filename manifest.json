@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "AI Panel",
+  "name": " ",
   "version": "0.0.1",
   "description": "A Chrome extension that brings ChatGPT, Perplexity, and Gemini to your browser side panel",
   "permissions": [
@@ -26,14 +26,25 @@
     "default_path": "index.html"
   },
   "action": {
-    "default_title": "AI Panel Chrome Extension"
+    "default_title": ""
   },
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://www.perplexity.ai/*",
     "https://perplexity.ai/*",
+    "https://*.perplexity.ai/*",
+    "https://www.genspark.ai/*",
+    "https://genspark.ai/*",
+    "https://*.genspark.ai/*",
+    "https://www.tongyi.com/*",
+    "https://tongyi.com/*",
+    "https://*.tongyi.com/*",
+    "https://www.doubao.com/*",
+    "https://doubao.com/*",
+    "https://*.doubao.com/*",
     "https://gemini.google.com/*",
     "https://accounts.google.com/*",
+    "https://www.google.com/*",
     "https://claude.ai/*",
     "https://notebooklm.google.com/*",
     "https://ima.qq.com/*",
