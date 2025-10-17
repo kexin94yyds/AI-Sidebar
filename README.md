@@ -31,6 +31,7 @@ This Chrome extension integrates popular AI chat providers directly into your br
 - **Gemini** - Google's AI assistant
 - **Claude** - Anthropic's AI assistant
 - **NotebookLM** - Google's AI note-taking tool
+- **Google** - Google Search (AI Overview / UDM)
 - **IMA** - Integrated AI assistant
 - **Attention Tracker** - Focus and productivity tracking
 

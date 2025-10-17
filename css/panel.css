@@ -50,6 +50,7 @@ html {
   border-radius: 12px;
   box-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
   z-index: 100000;
+  /* Hidden by default; reveal on hover */
   opacity: 0;
   transform: translateY(-8px);
   pointer-events: none;
@@ -93,6 +94,7 @@ html {
   box-shadow: 0 20px 40px rgba(0,0,0,0.18);
   padding: 6px 0;
   z-index: 100001;
+  user-select: none;
 }
 .dd-add {
   padding: 10px 12px;
@@ -103,11 +105,12 @@ html {
 }
 .dd-add:hover { background: #f3f7ff; }
 .dd-item {
-  padding: 10px 12px;
+  padding: 12px 14px;
   cursor: pointer;
   border-bottom: 1px solid #f1f5f9;
   display: flex;
   align-items: center;
+  min-height: 40px; /* larger hit area */
 }
 .dd-item:last-child { border-bottom: none; }
 .dd-item:hover { background: #f3f7ff; }
@@ -167,6 +170,7 @@ html {
   border: 1px solid var(--btn-blue-border);
   box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15), 0 6px 16px var(--btn-blue-shadow);
   color: var(--btn-text);
+  user-select: none;
 }
 .toolbar a#openInTab:hover { filter: brightness(1.05); text-decoration: none; }
 .toolbar a#openInTab:active { filter: brightness(0.97); }
@@ -189,8 +193,10 @@ html {
   border: none;
   border-radius: 0;
   background-color: transparent;
+  overflow: hidden; /* ensure scaled iframes don’t overflow */
   transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
 }
+
 
 .extension-body {
   display: flex;
@@ -214,3 +220,5 @@ html {
     transform: translateY(0);
   }
 }
+
+/* Removed per-provider scaling to keep natural size */
