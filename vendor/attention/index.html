@@ -863,92 +863,8 @@
     <script src="../supabase.js" defer></script>
     <script src="supabaseClient.js" defer></script>
     
-    <!-- 身份验证检查 -->
-    <script>
-        // 在扩展内置本地版本中，若未登录则显示一个登录入口（使用 chrome.identity 流程）
-        async function checkAuth() {
-            try {
-                if (window.supabaseClient && window.supabaseClient.init()) {
-                    const supabase = window.supabaseClient.getClient();
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session) return true;
-                }
-            } catch (_) {}
-            // 注入一个简单的登录按钮
-            const mount = document.getElementById('app') || document.body;
-            const box = document.createElement('div');
-            box.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0b0b0bcc;z-index:99999;';
-            box.innerHTML = '<div style="padding:16px 20px;border:1px solid #333;border-radius:10px;background:#111;color:#eee;font-family:sans-serif;min-width:280px;">' +
-              '<div style="margin-bottom:10px;">需要登录以启用云端功能</div>' +
-              '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
-                '<button id="ext-login" style="flex:1;padding:8px 12px;background:#4c8bf5;border:none;border-radius:6px;color:#fff;cursor:pointer;">使用 Google 登录</button>' +
-                '<button id="ext-config" style="padding:8px 12px;background:#2f2f2f;border:1px solid #444;border-radius:6px;color:#ddd;cursor:pointer;">配置</button>' +
-              '</div>' +
-              '<div style="font-size:12px;color:#999;">首次使用请先点击“配置”，填入你的 Supabase URL 与 Anon Key</div>' +
-              '</div>';
-            mount.appendChild(box);
-            const btn = box.querySelector('#ext-login');
-            box.querySelector('#ext-config')?.addEventListener('click', async () => {
-              const url = prompt('Supabase URL (例如 https://xxxx.supabase.co)', localStorage.getItem('supabase.url') || '');
-              if (!url) return;
-              const anon = prompt('Supabase Anon Key', localStorage.getItem('supabase.anon') || '');
-              if (!anon) return;
-              await window.supabaseClient.setConfig({ url, anonKey: anon });
-              alert('已保存 Supabase 配置');
-            });
-
-            btn?.addEventListener('click', async () => {
-              try {
-                const supabase = window.supabaseClient.getClient();
-                // 通过 Supabase 获取 OAuth URL（不自动重定向）
-                const { data, error } = await supabase.auth.signInWithOAuth({
-                  provider: 'google',
-                  options: {
-                    skipBrowserRedirect: true,
-                    redirectTo: `https://${chrome.runtime.id}.chromiumapp.org/` // 需在 Supabase Redirect URLs 添加
-                  }
-                });
-                if (error) throw error;
-                const authUrl = data?.url;
-                if (!authUrl) throw new Error('No auth URL');
-                // 通过 Chrome Identity 打开 OAuth 流程
-                chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (redirectUrl) => {
-                  if (chrome.runtime.lastError) {
-                    console.error('launchWebAuthFlow error:', chrome.runtime.lastError);
-                    alert('登录失败：' + chrome.runtime.lastError.message);
-                    return;
-                  }
-                  try {
-                    const u = new URL(redirectUrl);
-                    const code = u.searchParams.get('code');
-                    if (!code) throw new Error('No code from redirect');
-                    const { data: sess, error: exErr } = await supabase.auth.exchangeCodeForSession(code);
-                    if (exErr) throw exErr;
-                    box.remove();
-                  } catch (e) {
-                    console.error('exchangeCodeForSession failed:', e);
-                    alert('兑换登录凭证失败');
-                  }
-                });
-              } catch (e) {
-                console.error('OAuth init failed:', e);
-                alert('初始化登录失败');
-              }
-            });
-            return false;
-        }
-        
-        // 页面加载时检查登录状态
-        document.addEventListener('DOMContentLoaded', async function() {
-            const isAuthenticated = await checkAuth();
-            if (!isAuthenticated) {
-                return; // 页面会跳转到登录页面
-            }
-            
-            // 如果已登录，继续初始化应用
-            console.log('用户已认证，继续加载应用...');
-        });
-    </script>
+    <!-- 身份验证检查（外部脚本，避免 MV3 内联 CSP） -->
+    <script src="boot.js" defer></script>
     
     <script src="export_import.js" defer></script>
     <script src="combined.js" defer></script>
@@ -956,24 +872,7 @@
     <!-- 支付功能（可选离线，无 Supabase 也可使用基础功能） -->
     <script src="payment.js" defer></script>
 
-    <!-- PWA Service Worker 注册 -->
-    <script>
-        // 注册Service Worker
-        // Register SW only on http(s) origins, not in chrome-extension://
-        if (location.protocol.startsWith('http') && 'serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((registration) => {
-                        console.log('Service Worker 注册成功:', registration.scope);
-                    })
-                    .catch((error) => {
-                        console.log('Service Worker 注册失败:', error);
-                    });
-            });
-        }
-
-        // PWA安装提示已移除
-    </script>
+    <!-- PWA Service Worker 注册（已外部化至 boot.js，仅在 http(s) 下生效） -->
     
 
 </body>

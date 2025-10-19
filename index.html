@@ -8,19 +8,20 @@
     <link rel="stylesheet" href="css/panel.css" />
   </head>
   <body>
-    <div class="hover-zone"></div>
-    <div class="toolbar">
-      <label>Provider:</label>
-      <div class="dropdown" id="providerDropdown">
-        <button class="dd-toggle" id="providerToggle">
-          <span id="providerLabel">ChatGPT</span>
-          <span class="chev">▾</span>
-        </button>
-        <div class="dd-menu" id="providerMenu" style="display:none;"></div>
+    <!-- 左侧垂直导航栏 -->
+    <nav id="provider-tabs">
+      <!-- Provider tabs will be dynamically generated here -->
+    </nav>
+
+    <!-- 右侧主内容区 -->
+    <main id="main-content">
+      <div class="hover-zone"></div>
+      <div class="toolbar">
+        <a id="openInTab" href="#" target="_blank" rel="noreferrer">Open in Tab</a>
       </div>
-      <a id="openInTab" href="#" target="_blank" rel="noreferrer">Open in Tab</a>
-    </div>
-    <div id="iframe"></div>
+      <div id="iframe"></div>
+    </main>
+    
     <script src="js/popup.js"></script>
   </body>
 </html>

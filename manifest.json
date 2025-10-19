@@ -47,10 +47,24 @@
     "https://accounts.google.com/*",
     "https://www.google.com/*",
     "https://claude.ai/*",
+    "https://chat.deepseek.com/*",
+    "https://deepseek.com/*",
+    "https://*.deepseek.com/*",
     "https://notebooklm.google.com/*",
     "https://ima.qq.com/*",
     "https://ssl.ptlogin2.qq.com/*",
     "https://xui.ptlogin2.qq.com/*",
-    "https://attention-span-tracker.netlify.app/*"
-  ]
+    "https://attention-span-tracker.netlify.app/*",
+    "https://grok.com/*"
+  ],
+
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "bypass_headers",
+        "enabled": true,
+        "path": "rules/bypass-headers.json"
+      }
+    ]
+  }
 }

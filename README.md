@@ -19,6 +19,7 @@ This Chrome extension integrates popular AI chat providers directly into your br
 
 - **🎯 Side Panel Integration:** Access ChatGPT, Perplexity, Gemini, Claude, NotebookLM, IMA, and Attention Tracker from the side panel.
 - **🔄 Provider Switcher:** Quick dropdown to switch between AI providers; your choice is automatically remembered.
+- **🎨 Icon Display:** Visual provider icons for easy identification (updated Oct 2025).
 - **✅ Session Awareness:** Checks login status and prompts if needed (especially for ChatGPT).
 - **🔧 Header Adjustments:** Removes `content-security-policy`/`x-frame-options` headers for supported domains to allow seamless embedding.
 - **📱 Responsive Design:** Works smoothly with all supported AI platforms.

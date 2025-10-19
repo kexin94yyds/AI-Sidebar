@@ -224,6 +224,26 @@ function applyBaseDnrRules() {
         }
       },
       {
+        "id": 16,
+        "priority": 1,
+        "action": {
+          "type": "modifyHeaders",
+          "responseHeaders": [
+            { "header": "content-security-policy", "operation": "remove" },
+            { "header": "content-security-policy-report-only", "operation": "remove" },
+            { "header": "x-frame-options", "operation": "remove" },
+            { "header": "cross-origin-opener-policy", "operation": "remove" },
+            { "header": "cross-origin-embedder-policy", "operation": "remove" },
+            { "header": "cross-origin-resource-policy", "operation": "remove" },
+            { "header": "permissions-policy", "operation": "remove" }
+          ]
+        },
+        "condition": {
+          "urlFilter": "https://chat.deepseek.com/*",
+          "resourceTypes": ["main_frame", "sub_frame"]
+        }
+      },
+      {
         "id": 8,
         "priority": 1,
         "action": {
@@ -265,26 +285,6 @@ function applyBaseDnrRules() {
       }
       ,
       {
-        "id": 10,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://attention-span-tracker.netlify.app/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
         "id": 13,
         "priority": 1,
         "action": {
@@ -305,7 +305,7 @@ function applyBaseDnrRules() {
         }
       }
     ],
-    removeRuleIds: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    removeRuleIds: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
   });
 }
 

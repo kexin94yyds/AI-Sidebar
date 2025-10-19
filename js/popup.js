@@ -1,6 +1,7 @@
 const PROVIDERS = {
   chatgpt: {
     label: 'ChatGPT',
+    icon: 'images/providers/chatgpt.svg',
     baseUrl: 'https://chatgpt.com',
     iframeUrl: 'https://chatgpt.com/chat',
     authCheck: async () => {
@@ -30,6 +31,7 @@ const PROVIDERS = {
   },
   codex: {
     label: 'ChatGPT Codex',
+    icon: 'images/providers/codex.svg',
     baseUrl: 'https://chatgpt.com/codex',
     iframeUrl: 'https://chatgpt.com/codex',
     authCheck: async () => {
@@ -51,36 +53,42 @@ const PROVIDERS = {
   },
   perplexity: {
     label: 'Perplexity',
+    icon: 'images/providers/perplexity.png',
     baseUrl: 'https://www.perplexity.ai',
     iframeUrl: 'https://www.perplexity.ai/',
     authCheck: null
   },
   genspark: {
     label: 'Genspark',
+    icon: 'images/providers/genspark.png',
     baseUrl: 'https://www.genspark.ai',
     iframeUrl: 'https://www.genspark.ai/agents?type=moa_chat',
     authCheck: null
   },
   tongyi: {
     label: '通义千问',
+    icon: 'images/providers/tongyi.png',
     baseUrl: 'https://www.tongyi.com',
     iframeUrl: 'https://www.tongyi.com/',
     authCheck: null
   },
   doubao: {
     label: '豆包',
+    icon: 'images/providers/doubao.png',
     baseUrl: 'https://www.doubao.com',
     iframeUrl: 'https://www.doubao.com/',
     authCheck: null
   },
   gemini: {
     label: 'Gemini',
+    icon: 'images/providers/gemini.png',
     baseUrl: 'https://gemini.google.com',
     iframeUrl: 'https://gemini.google.com/app',
     authCheck: null // render directly; login handled by site
   },
   google: {
     label: 'Google',
+    icon: 'images/providers/google.png',
     baseUrl: 'https://www.google.com',
     // User-requested AI/UDM search entry
     iframeUrl: 'https://www.google.com/search?udm=50&aep=46&source=25q2-US-SearchSites-Site-CTA',
@@ -88,30 +96,42 @@ const PROVIDERS = {
   },
   claude: {
     label: 'Claude',
+    icon: 'images/providers/claude.png',
     baseUrl: 'https://claude.ai',
     iframeUrl: 'https://claude.ai',
     authCheck: null
   },
+  deepseek: {
+    label: 'DeepSeek',
+    icon: 'images/providers/deepseek.png',
+    baseUrl: 'https://chat.deepseek.com',
+    iframeUrl: 'https://chat.deepseek.com/',
+    authCheck: null
+  },
+  grok: {
+    label: 'Grok',
+    icon: 'images/providers/grok.png',
+    baseUrl: 'https://grok.com',
+    iframeUrl: 'https://grok.com/',
+    authCheck: null
+  },
   notebooklm: {
     label: 'NotebookLM',
+    icon: 'images/providers/notebooklm.png',
     baseUrl: 'https://notebooklm.google.com',
     iframeUrl: 'https://notebooklm.google.com/',
     authCheck: null
   },
   ima: {
     label: 'IMA',
+    icon: 'images/providers/ima.jpeg', // 使用新的熊猫图标
     baseUrl: 'https://ima.qq.com',
     iframeUrl: 'https://ima.qq.com/',
     authCheck: null
   },
-  attention: {
-    label: 'Attention Tracker',
-    baseUrl: 'https://attention-span-tracker.netlify.app/index.html#',
-    iframeUrl: 'https://attention-span-tracker.netlify.app/index.html#',
-    authCheck: null
-  },
   attention_local: {
     label: 'Attention (Local)',
+    icon: 'images/时间管道.JPG',
     baseUrl: 'vendor/attention/index.html',
     iframeUrl: 'vendor/attention/index.html',
     authCheck: null
@@ -255,6 +275,16 @@ const ensureFrame = (container, key, provider) => {
           if (e.preventDefault) e.preventDefault();
         } catch (_) {}
       });
+      // If a site still blocks embedding, surface a friendly message
+      view.addEventListener('loadabort', (e) => {
+        try {
+          const reason = e.reason || 'blocked';
+          const msg = 'This site refused to load in the panel (' + reason + '). ' +
+                      'Click Open in Tab to use it directly.';
+          const container = document.getElementById('iframe');
+          renderMessage(container, msg);
+        } catch (_) {}
+      });
     }
     view.src = provider.iframeUrl;
     view.style.width = '100%';
@@ -290,25 +320,207 @@ const renderMessage = (container, message) => {
   nodes.forEach((el) => { el.style.display = 'none'; });
 };
 
+// 当前拖拽中的 provider key
+let __dragKey = null;
+
+const getTabsCollapsed = async () => {
+  try {
+    const { tabsCollapsed } = await chrome.storage?.local.get(['tabsCollapsed']);
+    return !!tabsCollapsed;
+  } catch (_) {
+    return false;
+  }
+};
+const setTabsCollapsed = async (v) => {
+  try { await chrome.storage?.local.set({ tabsCollapsed: !!v }); } catch (_) {}
+};
+
+// 渲染底部导航栏（左侧垂直栏）
+const renderProviderTabs = async (currentProviderKey) => {
+  const tabsContainer = document.getElementById('provider-tabs');
+  if (!tabsContainer) return;
+
+  const overrides = await getOverrides();
+  tabsContainer.innerHTML = '';
+
+  // 折叠状态与头部
+  const collapsed = await getTabsCollapsed();
+  tabsContainer.classList.toggle('collapsed', collapsed);
+  const header = document.createElement('div');
+  header.className = 'tabs-header';
+  const toggle = document.createElement('button');
+  toggle.className = 'tabs-toggle';
+  toggle.title = collapsed ? '展开' : '收起';
+  toggle.textContent = collapsed ? '›' : '≡';
+  toggle.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const nv = !tabsContainer.classList.contains('collapsed');
+    tabsContainer.classList.toggle('collapsed', nv);
+    await setTabsCollapsed(nv);
+    // 不需要重建按钮，但为保持一致刷新头部图标
+    renderProviderTabs(currentProviderKey);
+  });
+  header.appendChild(toggle);
+  tabsContainer.appendChild(header);
+
+  // 获取所有提供商的顺序
+  let providerOrder = await chrome.storage.local.get('providerOrder').then(r => r.providerOrder || Object.keys(PROVIDERS));
+  
+  // 确保所有内置提供商都在顺序中
+  const allProviderKeys = Object.keys(PROVIDERS);
+  allProviderKeys.forEach(key => {
+    if (!providerOrder.includes(key)) {
+      providerOrder.push(key);
+    }
+  });
+  
+  // 加载自定义提供商
+  const customProviders = await loadCustomProviders();
+  const ALL = { ...PROVIDERS };
+  customProviders.forEach((c) => { 
+    ALL[c.key] = c; 
+    if (!providerOrder.includes(c.key)) providerOrder.push(c.key); 
+  });
+
+  // --- DnD 辅助函数 ---
+  const clearInsertClasses = () => {
+    tabsContainer.querySelectorAll('button.insert-before, button.insert-after')
+      .forEach((b)=>{ b.classList.remove('insert-before','insert-after'); });
+  };
+  const moveKeyToIndex = async (arr, key, idx) => {
+    const cur = arr.slice();
+    const from = cur.indexOf(key);
+    if (from === -1) return arr;
+    cur.splice(from, 1);
+    if (idx < 0) idx = 0;
+    if (idx > cur.length) idx = cur.length;
+    cur.splice(idx, 0, key);
+    await saveProviderOrder(cur);
+    // 重新渲染，保持当前激活不变
+    renderProviderTabs(currentProviderKey);
+    return cur;
+  };
+
+  // 为每个提供商创建标签按钮
+  providerOrder.forEach((key) => {
+    const cfg = ALL[key] || PROVIDERS[key];
+    if (!cfg) return;
+
+    const button = document.createElement('button');
+    button.dataset.providerId = key;
+    button.title = cfg.label; // 悬停提示
+    button.className = key === currentProviderKey ? 'active' : '';
+    button.draggable = !collapsed;
+
+    // 添加图标
+    if (cfg.icon) {
+      const icon = document.createElement('img');
+      icon.src = cfg.icon;
+      icon.alt = cfg.label;
+      icon.className = 'provider-icon';
+      icon.onerror = function() {
+        const fallback = document.createElement('div');
+        fallback.className = 'provider-icon provider-icon-fallback';
+        fallback.textContent = cfg.label.charAt(0).toUpperCase();
+        fallback.title = cfg.label;
+        this.parentNode.replaceChild(fallback, this);
+      };
+      button.appendChild(icon);
+    } else {
+      // 如果没有图标，显示首字母
+      const fallback = document.createElement('div');
+      fallback.className = 'provider-icon provider-icon-fallback';
+      fallback.textContent = cfg.label.charAt(0).toUpperCase();
+      fallback.title = cfg.label;
+      button.appendChild(fallback);
+    }
+
+    // 点击切换提供商
+    button.addEventListener('click', async () => {
+      const container = document.getElementById('iframe');
+      const openInTab = document.getElementById('openInTab');
+      
+      await setProvider(key);
+      const p = effectiveConfig(ALL, key, overrides);
+      if (openInTab) openInTab.href = p.baseUrl;
+      // ensure DNR + host permissions for selected origin
+      try { (typeof ensureAccessFor === 'function') && ensureAccessFor(p.baseUrl); } catch(_) {}
+
+      if (p.authCheck) {
+        const auth = await p.authCheck();
+        if (auth.state === 'authorized') {
+          ensureFrame(container, key, p);
+        } else {
+          renderMessage(container, auth.message || 'Please login.');
+        }
+      } else {
+        ensureFrame(container, key, p);
+      }
+
+      // 更新活动状态
+      renderProviderTabs(key);
+    });
+
+    tabsContainer.appendChild(button);
+
+    // --- 拖拽事件 ---
+    button.addEventListener('dragstart', (e) => {
+      if (collapsed) return; // 折叠时不启用拖拽
+      __dragKey = key;
+      button.classList.add('dragging');
+      try {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', key);
+      } catch (_) {}
+    });
+    button.addEventListener('dragend', () => {
+      __dragKey = null;
+      button.classList.remove('dragging');
+      clearInsertClasses();
+    });
+    button.addEventListener('dragover', (e) => {
+      if (collapsed) return;
+      if (!__dragKey || __dragKey === key) return;
+      e.preventDefault();
+      const rect = button.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      button.classList.toggle('insert-before', before);
+      button.classList.toggle('insert-after', !before);
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+    });
+    button.addEventListener('dragleave', () => {
+      button.classList.remove('insert-before','insert-after');
+    });
+    button.addEventListener('drop', async (e) => {
+      if (collapsed) return;
+      if (!__dragKey || __dragKey === key) return;
+      e.preventDefault();
+      const rect = button.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      const fromIdx = providerOrder.indexOf(__dragKey);
+      const toIdxBase = providerOrder.indexOf(key);
+      if (fromIdx === -1 || toIdxBase === -1) return;
+      let insertIdx = before ? toIdxBase : toIdxBase + 1;
+      // 调整因移除后的索引偏移
+      if (fromIdx < insertIdx) insertIdx -= 1;
+      await moveKeyToIndex(providerOrder, __dragKey, insertIdx);
+      __dragKey = null;
+    });
+  });
+
+  // 展开时：使用 sticky 置顶（CSS 负责），不覆盖第一个图标
+};
+
 const initializeBar = async () => {
   const container = document.getElementById('iframe');
-  const dd = document.getElementById('providerDropdown');
-  const ddToggle = document.getElementById('providerToggle');
-  const ddMenu = document.getElementById('providerMenu');
-  const ddLabel = document.getElementById('providerLabel');
   const openInTab = document.getElementById('openInTab');
-  // removed: overlay button / prompts storage
 
   const currentProviderKey = await getProvider();
   const overrides = await getOverrides();
   const mergedCurrent = effectiveConfig(PROVIDERS, currentProviderKey, overrides) || (PROVIDERS[currentProviderKey] || PROVIDERS.chatgpt);
 
-  // Simple menu show/hide helpers (no pointer-events toggling)
-  const openMenu = (e) => {
-    if (e) { e.preventDefault(); e.stopPropagation(); }
-    if (ddMenu) ddMenu.style.display = 'block';
-  };
-  const closeMenu = () => { if (ddMenu) ddMenu.style.display = 'none'; };
+  // 渲染底部导航栏
+  await renderProviderTabs(currentProviderKey);
 
   // helper: request host permission for a provider URL and add DNR rule
   const ensureAccessFor = (url) => {
@@ -326,200 +538,11 @@ const initializeBar = async () => {
     } catch (_) {}
   };
 
-  // Build dropdown menu
-  let providerOrder = await getProviderOrder();
-  const customProviders = await loadCustomProviders();
-  const ALL = { ...PROVIDERS };
-  // merge customs
-  customProviders.forEach((c) => { ALL[c.key] = c; if (!providerOrder.includes(c.key)) providerOrder.push(c.key); });
-
-  const buildMenu = (currentKey) => {
-    if (!ddMenu) return;
-    ddMenu.innerHTML = '';
-    // Quick action: grant access for current provider
-    if (currentKey) {
-      const grant = document.createElement('div');
-      grant.className = 'dd-add';
-      grant.textContent = 'Grant site access (current)';
-      const onGrant = (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const cur = ALL[currentKey] || PROVIDERS[currentKey];
-        if (cur) ensureAccessFor(cur.baseUrl || cur.iframeUrl);
-        closeMenu();
-      };
-      grant.addEventListener('pointerdown', onGrant);
-      grant.addEventListener('click', onGrant);
-      ddMenu.appendChild(grant);
-    }
-
-    // Note: embed-method quick toggles removed per request
-
-    // Add AI entry
-    const add = document.createElement('div');
-    add.className = 'dd-add';
-    add.textContent = '+ Add AI';
-    const onAdd = () => {
-      const label = prompt('AI Name');
-      if (!label) return;
-      const url = prompt('AI URL (e.g. https://example.com)');
-      if (!url) return;
-      const key = 'custom:' + Date.now();
-      const item = { key, label, baseUrl: url, iframeUrl: url, authCheck: null };
-      // request host permission for the origin (must be called during user gesture)
-      let origin = null;
-      try { origin = new URL(url).origin; } catch (_) {}
-      const proceed = () => {
-        // add dynamic rule in background (best-effort)
-        if (origin) {
-          try { chrome.runtime.sendMessage({ type: 'ai-add-host', origin }); } catch (_) {}
-        }
-        // persist provider and select it
-        loadCustomProviders().then((list) => {
-          list.push(item);
-          saveCustomProviders(list);
-        });
-        ALL[key] = item;
-        providerOrder = [key, ...providerOrder];
-        saveProviderOrder(providerOrder);
-        closeMenu();
-        ddLabel.textContent = label;
-        setProvider(key);
-        if (openInTab) openInTab.href = url;
-        ensureFrame(container, key, item);
-      };
-      if (origin && chrome.permissions && chrome.permissions.request) {
-        chrome.permissions.request({ origins: [origin + '/*'] }, (granted) => {
-          // ignore runtime.lastError; still proceed (Open in Tab 作为兜底)
-          proceed();
-        });
-      } else {
-        proceed();
-      }
-    };
-    add.addEventListener('pointerdown', (e)=>{ e.preventDefault(); onAdd(); });
-    add.addEventListener('click', (e)=>{ e.preventDefault(); onAdd(); });
-    ddMenu.appendChild(add);
-    providerOrder.forEach((key) => {
-      const cfg = ALL[key] || PROVIDERS[key];
-      if (!cfg) return;
-      const item = document.createElement('div');
-      item.className = 'dd-item' + (key === currentKey ? ' active' : '');
-      // left pin arrow
-      const pin = document.createElement('span');
-      pin.className = 'pin';
-      pin.textContent = '⬆';
-      pin.title = 'Move to top';
-      const onPin = async (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        providerOrder = [key, ...providerOrder.filter(k => k !== key)];
-        await saveProviderOrder(providerOrder);
-        buildMenu(currentKey);
-      };
-      pin.addEventListener('pointerdown', onPin);
-      pin.addEventListener('click', onPin);
-
-      const label = document.createElement('div');
-      label.className = 'label';
-      label.textContent = cfg.label;
-
-      // delete custom provider
-      let del = null;
-      if (key.startsWith('custom:')) {
-        del = document.createElement('span');
-        del.className = 'del';
-        del.textContent = '✕';
-        del.title = 'Delete';
-        const onDelete = async (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          // remove from storage
-          const list = await loadCustomProviders();
-          const left = list.filter(p => p.key !== key);
-          await saveCustomProviders(left);
-          // remove dnr rule
-          try {
-            const origin = new URL(cfg.baseUrl).origin;
-            chrome.runtime.sendMessage({ type: 'ai-remove-host', origin });
-          } catch (_) {}
-          // update order & ALL
-          providerOrder = providerOrder.filter(k => k !== key);
-          await saveProviderOrder(providerOrder);
-          delete ALL[key];
-          // if was selected, fallback to first provider
-          if (ddLabel.textContent === cfg.label) {
-            const fallbackKey = providerOrder[0] || 'chatgpt';
-            const fallback = ALL[fallbackKey] || PROVIDERS[fallbackKey];
-            ddLabel.textContent = fallback.label;
-            await setProvider(fallbackKey);
-            if (openInTab) openInTab.href = fallback.baseUrl;
-            ensureFrame(container, fallbackKey, fallback);
-          }
-          buildMenu(currentKey);
-        };
-        del.addEventListener('pointerdown', onDelete);
-        del.addEventListener('click', onDelete);
-      }
-
-      item.appendChild(pin);
-      item.appendChild(label);
-      if (del) item.appendChild(del);
-      item.dataset.key = key;
-      const onSelect = async () => {
-        closeMenu();
-        ddLabel.textContent = cfg.label;
-        await setProvider(key);
-        const latestOverrides = await getOverrides();
-        const p = effectiveConfig(ALL, key, latestOverrides);
-        if (openInTab) openInTab.href = p.baseUrl;
-        // ensure host access (optional permission) and DNR rule (user gesture)
-        ensureAccessFor(p.baseUrl || p.iframeUrl);
-        if (p.authCheck) {
-          const auth = await p.authCheck();
-          if (auth.state === 'authorized') {
-            ensureFrame(container, key, p);
-          } else {
-            renderMessage(container, auth.message || 'Please login.');
-          }
-        } else {
-          ensureFrame(container, key, p);
-        }
-        buildMenu(key);
-      };
-      item.addEventListener('pointerdown', (e) => { e.preventDefault(); onSelect(); });
-      item.addEventListener('click', (e) => { e.preventDefault(); onSelect(); });
-      ddMenu.appendChild(item);
-    });
-  };
-
-  // Initialize dropdown
-  if (ddToggle && ddMenu && ddLabel) {
-    ddLabel.textContent = (PROVIDERS[currentProviderKey] || PROVIDERS.chatgpt).label;
-    buildMenu(currentProviderKey);
-
-    const toggleMenu = (e) => {
-      const willOpen = ddMenu.style.display === 'none' || ddMenu.style.display === '';
-      if (willOpen) openMenu(e); else closeMenu();
-    };
-
-    // Use pointerdown only to avoid double-toggle with click
-    ddToggle.addEventListener('pointerdown', toggleMenu);
-    // Keyboard accessibility
-    ddToggle.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') toggleMenu(e);
-    });
-
-    // Close when clicking outside or pressing Escape
-    document.addEventListener('click', (e) => {
-      if (!dd.contains(e.target)) closeMenu();
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeMenu();
-    });
-  }
+  // The rest of this function is now handled by renderProviderTabs
+  // No need to build a separate list of providers here.
 
   if (openInTab) openInTab.href = mergedCurrent.baseUrl;
+  try { (typeof ensureAccessFor === 'function') && ensureAccessFor(mergedCurrent.baseUrl); } catch(_) {}
 
   // Initial render
   if (mergedCurrent.authCheck) {
