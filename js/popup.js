@@ -413,20 +413,32 @@ async function renderHistoryPanel() {
         } catch (_) {}
       });
     });
-    panel.querySelectorAll('.hp-remove')?.forEach((btn)=>{
-      btn.addEventListener('click', async (e)=>{
-        const url = normalizeUrlAttr(e.currentTarget.getAttribute('data-url'));
+    // Delegate remove clicks to handle dynamic rerenders reliably
+    try {
+      if (panel._hpRemoveHandler) panel.removeEventListener('click', panel._hpRemoveHandler, true);
+      panel._hpRemoveHandler = async (e) => {
+        const target = e.target;
+        if (!target || !(target.classList && target.classList.contains('hp-remove'))) return;
+        try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+        const raw = target.getAttribute('data-url');
+        const url = normalizeUrlAttr(raw || '');
+        try { if (localStorage.getItem('insidebar_debug_history')==='1') console.log('[history] remove click', url); } catch(_){}
+        // Optimistic removal
+        try { const row = target.closest('.hp-item'); if (row && row.parentNode) row.parentNode.removeChild(row); } catch(_){}
         try {
-          if (window.HistoryDB) {
-            await window.HistoryDB.removeByUrl(url);
-          } else {
-            const list = await loadHistory();
-            await saveHistory(list.filter((x)=> x.url !== url));
+          if (url) {
+            if (window.HistoryDB) {
+              await window.HistoryDB.removeByUrl(url);
+            } else {
+              const list = await loadHistory();
+              await saveHistory(list.filter((x)=> x.url !== url));
+            }
           }
-        } catch (_) {}
+        } catch (err) { try { console.warn('remove error', err); } catch(_){} }
         renderHistoryPanel();
-      });
-    });
+      };
+      panel.addEventListener('click', panel._hpRemoveHandler, true);
+    } catch (_) {}
     // Star/unstar from history list
     panel.querySelectorAll('.hp-star')?.forEach((btn)=>{
       btn.addEventListener('click', async (e)=>{
