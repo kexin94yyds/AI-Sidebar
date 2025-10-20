@@ -17,12 +17,18 @@
         title: String(document.title || ''),
         origin: String(location.origin)
       };
+      
       const toSend = JSON.stringify(payload);
       const doPost = () => {
         try {
-          // Post to parent (extension side-panel document)
-          window.parent && window.parent.postMessage(payload, '*');
-          lastSent = toSend;
+          // Post to top (extension side-panel document), so nested frames reach the panel
+          if (typeof window.top !== 'undefined' && window.top) {
+            window.top.postMessage(payload, '*');
+            lastSent = toSend;
+          } else if (window.parent) {
+            window.parent.postMessage(payload, '*');
+            lastSent = toSend;
+          }
         } catch (_) {}
       };
       if (immediate) {

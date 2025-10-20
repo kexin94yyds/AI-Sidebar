@@ -138,6 +138,10 @@ const PROVIDERS = {
   }
 };
 
+// Debug logging helper (set to false to silence in production)
+const DEBUG = true;
+const dbg = (...args) => { try { if (DEBUG) console.log('[AISidebar]', ...args); } catch (_) {} };
+
 // Custom provider helpers (for Add AI)
 async function loadCustomProviders() {
   return new Promise((resolve) => {
@@ -244,6 +248,7 @@ const showOnlyFrame = (container, key) => {
     el.style.display = el.dataset.provider === key ? 'block' : 'none';
   });
 };
+
 
 const ensureFrame = (container, key, provider) => {
   if (!cachedFrames[key]) {
@@ -569,6 +574,24 @@ const initializeBar = async () => {
     const preferred = currentUrlByProvider[currentProviderKey] || mergedCurrent.baseUrl;
     openInTab.href = preferred;
     try { openInTab.title = preferred; } catch (_) {}
+
+    // Open the current provider URL in the active (left) tab
+    // Falls back to a new tab if tab update isn’t possible
+    openInTab.addEventListener('click', async (e) => {
+      try {
+        e.preventDefault();
+      } catch (_) {}
+      const url = openInTab.href || preferred || mergedCurrent.baseUrl;
+      try {
+        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        const activeTab = tabs && tabs[0];
+        if (activeTab && activeTab.id) {
+          await chrome.tabs.update(activeTab.id, { url });
+          return;
+        }
+      } catch (_) {}
+      try { window.open(url, '_blank'); } catch (_) {}
+    });
   }
   try { (typeof ensureAccessFor === 'function') && ensureAccessFor(mergedCurrent.baseUrl); } catch(_) {}
 
@@ -604,11 +627,8 @@ window.addEventListener('message', (event) => {
         }
       } catch (_) {}
     }
-    if (!matchedKey) return;
-
-    // We rely on event.source identity (the iframe's contentWindow).
-    // Some sites and intermediate redirects can report varying origins;
-    // as long as the message comes from the matched frame, accept it.
+    // No provider matched; ignore stray messages
+    if (!matchedKey) { return; }
 
     // Update current URL for this provider
     if (typeof data.href === 'string' && data.href) {
