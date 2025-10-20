@@ -233,6 +233,10 @@ const saveProviderOrder = async (order) => {
 
 // Cache embedded elements per provider to preserve state between switches
 const cachedFrames = {};
+// Cache simple meta for frames (e.g., expected origin)
+const cachedFrameMeta = {}; // { [providerKey]: { origin: string } }
+// Track the latest known URL inside each provider frame (from content script)
+const currentUrlByProvider = {}; // { [providerKey]: string }
 
 const showOnlyFrame = (container, key) => {
   const nodes = container.querySelectorAll('[data-provider]');
@@ -291,6 +295,22 @@ const ensureFrame = (container, key, provider) => {
     view.style.height = '100%';
     container.appendChild(view);
     cachedFrames[key] = view;
+    // Update Open in Tab immediately to at least the initial URL
+    try {
+      const openInTab = document.getElementById('openInTab');
+      if (openInTab && typeof view.src === 'string') {
+        openInTab.href = view.src;
+      }
+    } catch (_) {}
+    // Record expected origin for this provider (for message validation)
+    try {
+      const origin = new URL(provider.baseUrl || provider.iframeUrl).origin;
+      cachedFrameMeta[key] = { origin };
+      // Initialize with initial URL as a fallback until content script reports
+      currentUrlByProvider[key] = provider.iframeUrl || provider.baseUrl || '';
+    } catch (_) {
+      cachedFrameMeta[key] = { origin: '' };
+    }
     const focusHandler = () => { try { view.focus(); } catch(_) {} };
     if (tag === 'iframe') {
       view.addEventListener('load', focusHandler);
@@ -442,7 +462,11 @@ const renderProviderTabs = async (currentProviderKey) => {
       
       await setProvider(key);
       const p = effectiveConfig(ALL, key, overrides);
-      if (openInTab) openInTab.href = p.baseUrl;
+      if (openInTab) {
+        const preferred = (currentUrlByProvider && currentUrlByProvider[key]) || p.baseUrl;
+        openInTab.href = preferred;
+        try { openInTab.title = preferred; } catch (_) {}
+      }
       // ensure DNR + host permissions for selected origin
       try { (typeof ensureAccessFor === 'function') && ensureAccessFor(p.baseUrl); } catch(_) {}
 
@@ -541,7 +565,11 @@ const initializeBar = async () => {
   // The rest of this function is now handled by renderProviderTabs
   // No need to build a separate list of providers here.
 
-  if (openInTab) openInTab.href = mergedCurrent.baseUrl;
+  if (openInTab) {
+    const preferred = currentUrlByProvider[currentProviderKey] || mergedCurrent.baseUrl;
+    openInTab.href = preferred;
+    try { openInTab.title = preferred; } catch (_) {}
+  }
   try { (typeof ensureAccessFor === 'function') && ensureAccessFor(mergedCurrent.baseUrl); } catch(_) {}
 
   // Initial render
@@ -559,5 +587,42 @@ const initializeBar = async () => {
   // removed keyboard command & navigation for menu
   // (keyboard command & navigation removed)
 };
+
+// Listen for URL updates from content scripts inside provider iframes
+window.addEventListener('message', (event) => {
+  try {
+    const data = event.data || {};
+    if (!data || data.type !== 'ai-url-changed') return;
+
+    // Find which provider frame this message came from by comparing contentWindow
+    let matchedKey = null;
+    for (const [key, el] of Object.entries(cachedFrames)) {
+      try {
+        if (el && el.contentWindow === event.source) {
+          matchedKey = key;
+          break;
+        }
+      } catch (_) {}
+    }
+    if (!matchedKey) return;
+
+    // We rely on event.source identity (the iframe's contentWindow).
+    // Some sites and intermediate redirects can report varying origins;
+    // as long as the message comes from the matched frame, accept it.
+
+    // Update current URL for this provider
+    if (typeof data.href === 'string' && data.href) {
+      currentUrlByProvider[matchedKey] = data.href;
+
+      // If this provider is currently visible, update the Open in Tab link
+      const openInTab = document.getElementById('openInTab');
+      const visible = (cachedFrames[matchedKey] && cachedFrames[matchedKey].style.display !== 'none');
+      if (openInTab && visible) {
+        openInTab.href = data.href;
+        try { openInTab.title = data.href; } catch (_) {}
+      }
+    }
+  } catch (_) {}
+});
 
 initializeBar();

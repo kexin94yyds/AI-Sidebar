@@ -470,3 +470,14 @@ html {
   border-radius: 14px;
   font-size: 12px;
 }
+
+/* When the left nav is collapsed, leave space for the floating toggle
+   so the top toolbar (Open in Tab) does not overlap it. */
+#provider-tabs.collapsed + #main-content .toolbar {
+  left: 48px; /* slightly more room to avoid visual overlap */
+}
+
+/* Ensure the toggle remains clickable above the toolbar when collapsed */
+#provider-tabs.collapsed .tabs-header {
+  z-index: 100002;
+}
