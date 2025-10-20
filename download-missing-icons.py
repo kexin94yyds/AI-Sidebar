@@ -109,3 +109,4 @@ if __name__ == '__main__':
             print(f"      - {key}.png ({config['name']})")
         print("   3. 保存到 images/providers/ 目录")
 
+

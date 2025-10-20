@@ -18,7 +18,15 @@
       <div class="hover-zone"></div>
       <div class="toolbar">
         <a id="openInTab" href="#" target="_blank" rel="noreferrer">Open in Tab</a>
+        <button id="copyLink" type="button" title="Copy current link">Copy Link</button>
+        <button id="historyBtn" type="button" title="View saved links">History</button>
+        <button id="addCurrentBtn" type="button" title="Save current link to history">Add Current</button>
+        <button id="favoritesBtn" type="button" title="Starred links">★ Star</button>
       </div>
+      <!-- History dropdown -->
+      <div id="historyPanel" class="history-panel" style="display:none;"></div>
+      <!-- Favorites dropdown -->
+      <div id="favoritesPanel" class="favorites-panel" style="display:none;"></div>
       <div id="iframe"></div>
     </main>
     

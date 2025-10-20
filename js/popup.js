@@ -239,8 +239,489 @@ const saveProviderOrder = async (order) => {
 const cachedFrames = {};
 // Cache simple meta for frames (e.g., expected origin)
 const cachedFrameMeta = {}; // { [providerKey]: { origin: string } }
-// Track the latest known URL inside each provider frame (from content script)
-const currentUrlByProvider = {}; // { [providerKey]: string }
+// Track the latest known URL and title inside each provider frame (from content script)
+const currentUrlByProvider = {};   // { [providerKey]: string }
+const currentTitleByProvider = {}; // { [providerKey]: string }
+
+// ---- History store helpers ----
+const HISTORY_KEY = 'aiLinkHistory';
+// When set, renderHistoryPanel will start inline edit for this URL
+let __pendingInlineEditUrl = null;
+// When true, the inline edit that starts should close panel on Enter
+let __pendingInlineEditCloseOnEnter = false;
+// Persist history panel search across re-renders
+let __historySearchQuery = '';
+function deriveTitle(provider, url, rawTitle) {
+  try {
+    const label = historyProviderLabel(provider) || '';
+    const t = (rawTitle || '').trim();
+    // Filter out generic or unhelpful titles
+    const blacklist = ['recent','google gemini','gemini','conversation with gemini'];
+    if (t && !blacklist.includes(t.toLowerCase())) {
+      if (!label) return t;
+      const containsLabel = t.toLowerCase().includes(label.toLowerCase());
+      // Be more permissive so titles like "ChatGPT chat" are accepted
+      const extraThreshold = (provider === 'chatgpt') ? 2 : 5;
+      if (!containsLabel || t.length > label.length + extraThreshold) return t;
+    }
+    const u = new URL(url);
+    const parts = u.pathname.split('/').filter(Boolean);
+    let id = parts[parts.length - 1] || '';
+    if (provider === 'chatgpt') {
+      const idx = parts.indexOf('c');
+      if (idx >= 0 && parts[idx + 1]) id = parts[idx + 1];
+    } else if (provider === 'gemini') {
+      const idx = parts.indexOf('app');
+      if (idx >= 0 && parts[idx + 1]) id = parts[idx + 1];
+    }
+    const shortId = id ? id.slice(0, 8) : '';
+    return [label || provider, shortId].filter(Boolean).join(' ');
+  } catch (_) { return rawTitle || historyProviderLabel(provider) || provider || 'Conversation'; }
+}
+async function loadHistory() {
+  try {
+    const res = await new Promise((r)=> chrome.storage?.local.get([HISTORY_KEY], (v)=> r(v||{})));
+    const arr = Array.isArray(res[HISTORY_KEY]) ? res[HISTORY_KEY] : [];
+    return arr;
+  } catch (_) { return []; }
+}
+async function saveHistory(list) {
+  try { await chrome.storage?.local.set({ [HISTORY_KEY]: list }); } catch (_) {}
+}
+async function addHistory(entry) {
+  try {
+    const list = await loadHistory();
+    // de-dup by url; newest first
+    const filtered = list.filter((x)=> x && x.url !== entry.url);
+    // If caller wants inline rename, we may still prefill a suggested title.
+    // Use provided title when available; otherwise fall back to derived.
+    const suggested = typeof entry.title === 'string' ? entry.title : '';
+    const title = entry && entry.needsTitle
+      ? suggested
+      : deriveTitle(entry.provider, entry.url, suggested);
+    const next = [{...entry, title, time: Date.now()}].concat(filtered).slice(0, 500);
+    await saveHistory(next);
+    return next;
+  } catch (_) { return null; }
+}
+function isDeepLink(providerKey, href) {
+  try {
+    if (!href) return false;
+    const u = new URL(href);
+    if (providerKey === 'chatgpt') {
+      // ChatGPT deep links: /c/<id> (primary), sometimes include conversationId in query
+      if (/\/c\/[a-z0-9-]+/i.test(u.pathname)) return true;
+      if (u.searchParams && u.searchParams.get('conversationId')) return true;
+      return false;
+    }
+    if (providerKey === 'gemini') return /\/app\//.test(u.pathname) && u.pathname !== '/app';
+    if (providerKey === 'perplexity') return /\/search\//.test(u.pathname);
+    if (providerKey === 'deepseek') return /(\/sessions\/|\/s\/|\/chat)/.test(u.pathname);
+    if (providerKey === 'notebooklm') {
+      // NotebookLM uses a variety of routes; treat any non-root path as a deep link
+      return (u.pathname && u.pathname !== '/' && u.pathname !== '/u/0' && u.pathname !== '/u/1');
+    }
+  } catch (_) {}
+  return false;
+}
+function historyProviderLabel(key) {
+  const m = PROVIDERS[key];
+  return (m && m.label) || key;
+}
+async function renderHistoryPanel() {
+  try {
+    const panel = document.getElementById('historyPanel');
+    if (!panel) return;
+    const list = await loadHistory();
+    const favList = await loadFavorites();
+    const favSet = new Set((favList||[]).map(x=> x.url));
+    const rows = (list || []).map((it)=>{
+      const date = new Date(it.time||Date.now());
+      const ds = date.toLocaleString();
+      // Always show an informative title. If storage carries needsTitle with empty title,
+      // fall back to a derived title so the row never appears blank.
+      const titleToShow = (it && it.title && it.title.trim())
+        ? it.title
+        : (deriveTitle(it.provider, it.url, '') || '');
+      const escTitle = titleToShow.replace(/[<>]/g,'');
+      const isStarred = favSet.has(it.url);
+      const starClass = isStarred ? 'hp-star active' : 'hp-star';
+      const starTitle = isStarred ? 'Unstar' : 'Star';
+      return `<div class="hp-item" data-url="${it.url}">
+        <span class="hp-provider">${historyProviderLabel(it.provider||'')}</span>
+        <span class="hp-title" data-url="${it.url}" title="${escTitle}">${escTitle}</span>
+        <span class="hp-time">${ds}</span>
+        <span class="hp-actions">
+          <a href="${it.url}" target="_blank" rel="noreferrer">Open</a>
+          <button class="hp-copy" data-url="${it.url}">Copy</button>
+          <button class="hp-rename" data-url="${it.url}">Rename</button>
+          <button class="${starClass}" data-url="${it.url}" title="${starTitle}">★</button>
+          <button class="hp-remove" data-url="${it.url}">Remove</button>
+        </span>
+      </div>`;
+    }).join('');
+    panel.innerHTML = `<div class=\"hp-header\">\n      <span>History</span>\n      <span class=\"hp-actions\">\n        <button id=\"hp-add-current\">Add Current</button>\n        <button id=\"hp-clear-all\">Clear</button>\n        <button id=\"hp-close\">Close</button>\n      </span>\n    </div>\n    <div class=\"hp-search-row\">\n      <span class=\"hp-search-icon\">🔍</span>\n      <input id=\"hp-search-input\" class=\"hp-search-input\" type=\"text\" placeholder=\"搜索\" />\n    </div>\n    <div class=\"hp-list\">${rows || ''}</div>`;
+    // events
+    panel.querySelector('#hp-close')?.addEventListener('click', ()=> panel.style.display='none');
+    panel.querySelector('#hp-clear-all')?.addEventListener('click', async ()=>{ await saveHistory([]); renderHistoryPanel(); });
+    panel.querySelector('#hp-add-current')?.addEventListener('click', async ()=>{
+      try {
+        const a = document.getElementById('openInTab');
+        const href = a && a.href;
+        const provider = (await getProvider())||'chatgpt';
+        if (href) {
+          __pendingInlineEditUrl = href;
+          __pendingInlineEditCloseOnEnter = true;
+          const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
+          await addHistory({ url: href, provider, title: suggested, needsTitle: true });
+          renderHistoryPanel();
+        }
+      } catch (_) {}
+    });
+    panel.querySelectorAll('.hp-copy')?.forEach((btn)=>{
+      btn.addEventListener('click', async (e)=>{
+        try { await navigator.clipboard.writeText(e.currentTarget.getAttribute('data-url')); } catch (_) {}
+      });
+    });
+    panel.querySelectorAll('.hp-remove')?.forEach((btn)=>{
+      btn.addEventListener('click', async (e)=>{
+        const url = e.currentTarget.getAttribute('data-url');
+        const list = await loadHistory();
+        await saveHistory(list.filter((x)=> x.url !== url));
+        renderHistoryPanel();
+      });
+    });
+    // Star/unstar from history list
+    panel.querySelectorAll('.hp-star')?.forEach((btn)=>{
+      btn.addEventListener('click', async (e)=>{
+        const url = e.currentTarget.getAttribute('data-url');
+        const isActive = e.currentTarget.classList.contains('active');
+        const provider = (await getProvider())||'chatgpt';
+        if (isActive) {
+          const favs = await loadFavorites();
+          await saveFavorites(favs.filter((x)=> x.url !== url));
+          renderHistoryPanel();
+        } else {
+          __pendingFavInlineEditUrl = url;
+          __pendingFavCloseOnEnter = true;
+          const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
+          await addFavorite({ url, provider, title: suggested, needsTitle: true });
+          try {
+            if (typeof window.showFavoritesPanel === 'function') {
+              await window.showFavoritesPanel();
+            } else {
+              const p = document.getElementById('favoritesPanel');
+              if (p) p.style.display = 'block';
+            }
+          } catch (_) {}
+          renderHistoryPanel();
+        }
+      });
+    });
+    const beginInlineEdit = (titleEl, options) => {
+      try {
+        const row = titleEl.closest('.hp-item');
+        const url = row?.getAttribute('data-url');
+        const orig = titleEl.textContent || '';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = orig;
+        input.className = 'hp-title-input';
+        titleEl.replaceWith(input);
+        input.focus(); input.select();
+        const closeOnEnter = !!(options && options.closeOnEnter);
+        const finish = async (save, how) => {
+          try {
+            const newTitle = save ? (input.value || '').trim() : orig;
+            const list = await loadHistory();
+            const idx = list.findIndex((x)=> x.url === url);
+            if (idx >= 0 && save && newTitle) {
+              // Clear needsTitle once a custom title is saved
+              list[idx] = { ...list[idx], title: newTitle, needsTitle: false };
+              await saveHistory(list);
+            }
+          } catch (_) {}
+          renderHistoryPanel();
+          // If this inline edit was initiated by Add Current and Enter was pressed, close panel
+          try {
+            if (how === 'enter' && closeOnEnter) {
+              if (typeof window.hideHistoryPanel === 'function') {
+                window.hideHistoryPanel();
+              } else {
+                const p = document.getElementById('historyPanel');
+                if (p) p.style.display = 'none';
+                try { document.getElementById('historyBackdrop')?.remove(); } catch (_) {}
+              }
+            }
+          } catch (_) {}
+        };
+        input.addEventListener('keydown', (e)=>{
+          if (e.key === 'Enter') finish(true, 'enter');
+          if (e.key === 'Escape') finish(false, 'escape');
+        });
+        input.addEventListener('blur', ()=> finish(true, 'blur'));
+      } catch (_) {}
+    };
+    panel.querySelectorAll('.hp-title')?.forEach((el)=>{
+      el.addEventListener('click', ()=> beginInlineEdit(el));
+    });
+    panel.querySelectorAll('.hp-rename')?.forEach((btn)=>{
+      btn.addEventListener('click', (e)=>{
+        const row = e.currentTarget.closest('.hp-item');
+        const titleEl = row?.querySelector('.hp-title');
+        if (titleEl) beginInlineEdit(titleEl);
+      });
+    });
+
+    // --- Search controls (always visible below header) ---
+    try {
+      const searchInput = panel.querySelector('#hp-search-input');
+      const filterRows = (qRaw) => {
+        const q = (qRaw || '').toLowerCase();
+        __historySearchQuery = qRaw || '';
+        let matchCount = 0;
+        panel.querySelectorAll('.hp-item')?.forEach((row)=>{
+          const title = (row.querySelector('.hp-title')?.textContent || '').toLowerCase();
+          const url = (row.getAttribute('data-url') || '').toLowerCase();
+          const provider = (row.querySelector('.hp-provider')?.textContent || '').toLowerCase();
+          const ok = !q || title.includes(q) || url.includes(q) || provider.includes(q);
+          row.style.display = ok ? 'flex' : 'none';
+          if (ok) matchCount++;
+        });
+        const emptyId = 'hp-search-empty';
+        let empty = panel.querySelector('#'+emptyId);
+        if (matchCount === 0 && (panel.querySelectorAll('.hp-item').length > 0)) {
+          if (!empty) {
+            empty = document.createElement('div');
+            empty.id = emptyId;
+            empty.style.padding = '8px 12px';
+            empty.style.color = '#64748b';
+            empty.textContent = 'No matches';
+            panel.querySelector('.hp-list')?.appendChild(empty);
+          }
+        } else if (empty && matchCount > 0) {
+          empty.remove();
+        }
+      };
+      if (searchInput) {
+        searchInput.value = __historySearchQuery;
+        let __searchDebounce = null;
+        searchInput.addEventListener('input', (e)=>{
+          const v = e.currentTarget.value;
+          if (__searchDebounce) clearTimeout(__searchDebounce);
+          __searchDebounce = setTimeout(()=> filterRows(v), 80);
+        });
+        // If we are about to start an inline rename (after clicking Add Current),
+        // do NOT steal focus to the search box. Keep focus on the rename input.
+        if (!__pendingInlineEditUrl) {
+          setTimeout(()=>{ try { searchInput.focus(); searchInput.select(); } catch(_){} }, 0);
+        }
+        filterRows(__historySearchQuery);
+      }
+    } catch (_) {}
+
+    // If we have a pending inline edit request (from toolbar Add), start it now
+    if (__pendingInlineEditUrl) {
+      try {
+        const row = panel.querySelector(`.hp-item[data-url="${CSS.escape(__pendingInlineEditUrl)}"]`);
+        const titleEl = row?.querySelector('.hp-title');
+        if (titleEl) beginInlineEdit(titleEl, { closeOnEnter: !!__pendingInlineEditCloseOnEnter });
+      } catch (_) { /* no-op */ }
+      __pendingInlineEditUrl = null;
+      __pendingInlineEditCloseOnEnter = false;
+    }
+  } catch (_) {}
+}
+
+// ---- Favorites store helpers ----
+const FAVORITES_KEY = 'aiFavoriteLinks';
+let __pendingFavInlineEditUrl = null;
+let __pendingFavCloseOnEnter = false;
+let __favSearchQuery = '';
+async function loadFavorites() {
+  try {
+    const res = await new Promise((r)=> chrome.storage?.local.get([FAVORITES_KEY], (v)=> r(v||{})));
+    const arr = Array.isArray(res[FAVORITES_KEY]) ? res[FAVORITES_KEY] : [];
+    return arr;
+  } catch (_) { return []; }
+}
+async function saveFavorites(list) {
+  try { await chrome.storage?.local.set({ [FAVORITES_KEY]: list }); } catch (_) {}
+}
+async function addFavorite(entry) {
+  try {
+    const list = await loadFavorites();
+    const filtered = list.filter((x)=> x && x.url !== entry.url);
+    const suggested = typeof entry.title === 'string' ? entry.title : '';
+    const title = entry && entry.needsTitle
+      ? suggested
+      : deriveTitle(entry.provider, entry.url, suggested);
+    const next = [{...entry, title, time: Date.now()}].concat(filtered).slice(0, 500);
+    await saveFavorites(next);
+    return next;
+  } catch (_) { return null; }
+}
+
+async function renderFavoritesPanel() {
+  try {
+    const panel = document.getElementById('favoritesPanel');
+    if (!panel) return;
+    const list = await loadFavorites();
+    const rows = (list || []).map((it)=>{
+      const date = new Date(it.time||Date.now());
+      const ds = date.toLocaleString();
+      const titleToShow = (it && it.title && it.title.trim())
+        ? it.title
+        : (deriveTitle(it.provider, it.url, '') || '');
+      const escTitle = titleToShow.replace(/[<>]/g,'');
+      return `<div class="fp-item" data-url="${it.url}">
+        <span class="fp-provider">${historyProviderLabel(it.provider||'')}</span>
+        <span class="fp-title" data-url="${it.url}" title="${escTitle}">${escTitle}</span>
+        <span class="fp-time">${ds}</span>
+        <span class="fp-actions-row">
+          <a href="${it.url}" target="_blank" rel="noreferrer">Open</a>
+          <button class="fp-copy" data-url="${it.url}">Copy</button>
+          <button class="fp-rename" data-url="${it.url}">Rename</button>
+          <button class="fp-remove" data-url="${it.url}">Remove</button>
+        </span>
+      </div>`;
+    }).join('');
+    panel.innerHTML = `<div class=\"fp-header\">\n      <span>Favorites</span>\n      <span class=\"fp-actions\">\n        <button id=\"fp-add-current\">Add Current</button>\n        <button id=\"fp-clear-all\">Clear</button>\n        <button id=\"fp-close\">Close</button>\n      </span>\n    </div>\n    <div class=\"fp-search-row\">\n      <span class=\"fp-search-icon\">🔍</span>\n      <input id=\"fp-search-input\" class=\"fp-search-input\" type=\"text\" placeholder=\"搜索\" />\n    </div>\n    <div class=\"fp-list\">${rows || ''}</div>`;
+
+    panel.querySelector('#fp-close')?.addEventListener('click', ()=> panel.style.display='none');
+    panel.querySelector('#fp-clear-all')?.addEventListener('click', async ()=>{ await saveFavorites([]); renderFavoritesPanel(); });
+    panel.querySelector('#fp-add-current')?.addEventListener('click', async ()=>{
+      try {
+        const a = document.getElementById('openInTab');
+        const href = a && a.href;
+        const provider = (await getProvider())||'chatgpt';
+        if (href) {
+          __pendingFavInlineEditUrl = href;
+          __pendingFavCloseOnEnter = true;
+          const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
+          await addFavorite({ url: href, provider, title: suggested, needsTitle: true });
+          renderFavoritesPanel();
+        }
+      } catch (_) {}
+    });
+    panel.querySelectorAll('.fp-copy')?.forEach((btn)=>{
+      btn.addEventListener('click', async (e)=>{
+        try { await navigator.clipboard.writeText(e.currentTarget.getAttribute('data-url')); } catch (_) {}
+      });
+    });
+    panel.querySelectorAll('.fp-remove')?.forEach((btn)=>{
+      btn.addEventListener('click', async (e)=>{
+        const url = e.currentTarget.getAttribute('data-url');
+        const list = await loadFavorites();
+        await saveFavorites(list.filter((x)=> x.url !== url));
+        renderFavoritesPanel();
+      });
+    });
+    const beginInlineEdit = (titleEl, options) => {
+      try {
+        const row = titleEl.closest('.fp-item');
+        const url = row?.getAttribute('data-url');
+        const orig = titleEl.textContent || '';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = orig;
+        input.className = 'fp-title-input';
+        titleEl.replaceWith(input);
+        input.focus(); input.select();
+        const closeOnEnter = !!(options && options.closeOnEnter);
+        const finish = async (save, how) => {
+          try {
+            const newTitle = save ? (input.value || '').trim() : orig;
+            const list = await loadFavorites();
+            const idx = list.findIndex((x)=> x.url === url);
+            if (idx >= 0 && save && newTitle) {
+              list[idx] = { ...list[idx], title: newTitle };
+              await saveFavorites(list);
+            }
+          } catch (_) {}
+          renderFavoritesPanel();
+          try {
+            if (how === 'enter' && closeOnEnter) {
+              const p = document.getElementById('favoritesPanel');
+              if (p) p.style.display = 'none';
+              try { document.getElementById('favoritesBackdrop')?.remove(); } catch (_) {}
+            }
+          } catch (_) {}
+        };
+        input.addEventListener('keydown', (e)=>{
+          if (e.key === 'Enter') finish(true, 'enter');
+          if (e.key === 'Escape') finish(false, 'escape');
+        });
+        input.addEventListener('blur', ()=> finish(true, 'blur'));
+      } catch (_) {}
+    };
+    panel.querySelectorAll('.fp-title')?.forEach((el)=>{
+      el.addEventListener('click', ()=> beginInlineEdit(el));
+    });
+    panel.querySelectorAll('.fp-rename')?.forEach((btn)=>{
+      btn.addEventListener('click', (e)=>{
+        const row = e.currentTarget.closest('.fp-item');
+        const titleEl = row?.querySelector('.fp-title');
+        if (titleEl) beginInlineEdit(titleEl);
+      });
+    });
+
+    // Search
+    try {
+      const searchInput = panel.querySelector('#fp-search-input');
+      const filterRows = (qRaw) => {
+        const q = (qRaw || '').toLowerCase();
+        __favSearchQuery = qRaw || '';
+        let matchCount = 0;
+        panel.querySelectorAll('.fp-item')?.forEach((row)=>{
+          const title = (row.querySelector('.fp-title')?.textContent || '').toLowerCase();
+          const url = (row.getAttribute('data-url') || '').toLowerCase();
+          const provider = (row.querySelector('.fp-provider')?.textContent || '').toLowerCase();
+          const ok = !q || title.includes(q) || url.includes(q) || provider.includes(q);
+          row.style.display = ok ? 'flex' : 'none';
+          if (ok) matchCount++;
+        });
+        const emptyId = 'fp-search-empty';
+        let empty = panel.querySelector('#'+emptyId);
+        if (matchCount === 0 && (panel.querySelectorAll('.fp-item').length > 0)) {
+          if (!empty) {
+            empty = document.createElement('div');
+            empty.id = emptyId;
+            empty.style.padding = '8px 12px';
+            empty.style.color = '#64748b';
+            empty.textContent = 'No matches';
+            panel.querySelector('.fp-list')?.appendChild(empty);
+          }
+        } else if (empty && matchCount > 0) {
+          empty.remove();
+        }
+      };
+      if (searchInput) {
+        searchInput.value = __favSearchQuery;
+        let __searchDebounce = null;
+        searchInput.addEventListener('input', (e)=>{
+          const v = e.currentTarget.value;
+          if (__searchDebounce) clearTimeout(__searchDebounce);
+          __searchDebounce = setTimeout(()=> filterRows(v), 80);
+        });
+        if (!__pendingFavInlineEditUrl) {
+          setTimeout(()=>{ try { searchInput.focus(); searchInput.select(); } catch(_){} }, 0);
+        }
+        filterRows(__favSearchQuery);
+      }
+    } catch (_) {}
+
+    if (__pendingFavInlineEditUrl) {
+      try {
+        const row = panel.querySelector(`.fp-item[data-url="${CSS.escape(__pendingFavInlineEditUrl)}"]`);
+        const titleEl = row?.querySelector('.fp-title');
+        if (titleEl) beginInlineEdit(titleEl, { closeOnEnter: !!__pendingFavCloseOnEnter });
+      } catch (_) {}
+      __pendingFavInlineEditUrl = null;
+      __pendingFavCloseOnEnter = false;
+    }
+  } catch (_) {}
+}
 
 const showOnlyFrame = (container, key) => {
   const nodes = container.querySelectorAll('[data-provider]');
@@ -574,6 +1055,7 @@ const initializeBar = async () => {
     const preferred = currentUrlByProvider[currentProviderKey] || mergedCurrent.baseUrl;
     openInTab.href = preferred;
     try { openInTab.title = preferred; } catch (_) {}
+    try { const b=document.getElementById('copyLink'); if (b) b.title = preferred; } catch (_) {}
 
     // Open the current provider URL in the active (left) tab
     // Falls back to a new tab if tab update isn’t possible
@@ -593,6 +1075,186 @@ const initializeBar = async () => {
       try { window.open(url, '_blank'); } catch (_) {}
     });
   }
+
+  // Copy current link button handler
+  try {
+    const copyBtn = document.getElementById('copyLink');
+    if (copyBtn) {
+      const computeUrl = () => {
+        try { const a = document.getElementById('openInTab'); if (a && a.href) return a.href; } catch (_) {}
+        return mergedCurrent.baseUrl;
+      };
+      copyBtn.addEventListener('click', async () => {
+        const text = computeUrl();
+        try {
+          await navigator.clipboard.writeText(text);
+          const old = copyBtn.textContent;
+          copyBtn.textContent = 'Copied';
+          setTimeout(() => { try { copyBtn.textContent = old; } catch (_) {} }, 1200);
+        } catch (e) {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            const old = copyBtn.textContent;
+            copyBtn.textContent = 'Copied';
+            setTimeout(() => { try { copyBtn.textContent = old; } catch (_) {} }, 1200);
+          } catch (_) {}
+        }
+      });
+    }
+  } catch (_) {}
+
+  // History button handler
+  try {
+    const hBtn = document.getElementById('historyBtn');
+    const panel = document.getElementById('historyPanel');
+    const ensureBackdrop = () => {
+      let bd = document.getElementById('historyBackdrop');
+      if (!bd) {
+        bd = document.createElement('div');
+        bd.id = 'historyBackdrop';
+        bd.className = 'history-backdrop';
+        bd.addEventListener('click', () => hideHistoryPanel());
+        // Attach under the same stacking context as the panel to guarantee panel stays above
+        const parent = panel.parentNode || document.body;
+        parent.appendChild(bd);
+      }
+      return bd;
+    };
+    const removeBackdrop = () => {
+      const bd = document.getElementById('historyBackdrop');
+      if (bd && bd.parentNode) bd.parentNode.removeChild(bd);
+    };
+    const showHistoryPanel = async () => {
+      await renderHistoryPanel();
+      panel.style.display = 'block';
+      ensureBackdrop();
+    };
+    const hideHistoryPanel = () => {
+      panel.style.display = 'none';
+      removeBackdrop();
+    };
+    window.hideHistoryPanel = hideHistoryPanel; // expose for other handlers if needed
+    window.showHistoryPanel = showHistoryPanel;
+
+    if (hBtn && panel) {
+      hBtn.addEventListener('click', async () => {
+        if (panel.style.display === 'none' || !panel.style.display) {
+          await showHistoryPanel();
+        } else {
+          hideHistoryPanel();
+        }
+      });
+    }
+
+    // Close with Escape
+    document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') hideHistoryPanel(); }, true);
+  } catch (_) {}
+
+  // Favorites button handler
+  try {
+    const fBtn = document.getElementById('favoritesBtn');
+    const panel = document.getElementById('favoritesPanel');
+    const isTyping = () => {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = (el.tagName||'').toLowerCase();
+      return tag === 'input' || tag === 'textarea' || !!el.isContentEditable;
+    };
+    const starCurrentAndOpenRename = async () => {
+      try {
+        const a = document.getElementById('openInTab');
+        const href = a && a.href;
+        const provider = (await getProvider())||'chatgpt';
+        if (href) {
+          __pendingFavInlineEditUrl = href;
+          __pendingFavCloseOnEnter = true;
+          const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
+          await addFavorite({ url: href, provider, title: suggested, needsTitle: true });
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    };
+    const ensureBackdrop = () => {
+      let bd = document.getElementById('favoritesBackdrop');
+      if (!bd) {
+        bd = document.createElement('div');
+        bd.id = 'favoritesBackdrop';
+        bd.className = 'favorites-backdrop';
+        bd.addEventListener('click', () => hideFavoritesPanel());
+        const parent = panel.parentNode || document.body;
+        parent.appendChild(bd);
+      }
+      return bd;
+    };
+    const removeBackdrop = () => {
+      const bd = document.getElementById('favoritesBackdrop');
+      if (bd && bd.parentNode) bd.parentNode.removeChild(bd);
+    };
+    const showFavoritesPanel = async () => {
+      await renderFavoritesPanel();
+      panel.style.display = 'block';
+      ensureBackdrop();
+    };
+    const hideFavoritesPanel = () => {
+      panel.style.display = 'none';
+      removeBackdrop();
+    };
+    window.hideFavoritesPanel = hideFavoritesPanel;
+    window.showFavoritesPanel = showFavoritesPanel;
+
+    if (fBtn && panel) {
+      fBtn.addEventListener('click', async () => {
+        await starCurrentAndOpenRename();
+        if (panel.style.display === 'none' || !panel.style.display) {
+          await showFavoritesPanel();
+        } else {
+          hideFavoritesPanel();
+        }
+      });
+    }
+
+    // Close with Escape
+    document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') hideFavoritesPanel(); }, true);
+  } catch (_) {}
+
+  // Add Current button in toolbar
+  try {
+    const addBtn = document.getElementById('addCurrentBtn');
+    if (addBtn) {
+      addBtn.addEventListener('click', async () => {
+        try {
+          const a = document.getElementById('openInTab');
+          const href = a && a.href;
+          const provider = (await getProvider())||'chatgpt';
+          if (href) {
+            // Add with suggested title captured from provider content script, but still open inline rename
+            __pendingInlineEditUrl = href;
+            __pendingInlineEditCloseOnEnter = true;
+            const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
+            await addHistory({ url: href, provider, title: suggested, needsTitle: true });
+            try {
+              const panel = document.getElementById('historyPanel');
+              if (panel) {
+                if (typeof window.showHistoryPanel === 'function') {
+                  await window.showHistoryPanel();
+                } else {
+                  panel.style.display = 'block';
+                }
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
+      });
+    }
+  } catch (_) {}
   try { (typeof ensureAccessFor === 'function') && ensureAccessFor(mergedCurrent.baseUrl); } catch(_) {}
 
   // Initial render
@@ -611,11 +1273,20 @@ const initializeBar = async () => {
   // (keyboard command & navigation removed)
 };
 
-// Listen for URL updates from content scripts inside provider iframes
-window.addEventListener('message', (event) => {
-  try {
-    const data = event.data || {};
-    if (!data || data.type !== 'ai-url-changed') return;
+// Also close panel on Escape (backdrop version handles outside clicks)
+try {
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    try { const p = document.getElementById('historyPanel'); if (p) p.style.display = 'none'; } catch (_) {}
+    try { document.getElementById('historyBackdrop')?.remove(); } catch (_) {}
+  }, true);
+} catch (_) {}
+
+  // Listen for URL updates from content scripts inside provider iframes
+  window.addEventListener('message', (event) => {
+    try {
+      const data = event.data || {};
+      if (!data || data.type !== 'ai-url-changed') return;
 
     // Find which provider frame this message came from by comparing contentWindow
     let matchedKey = null;
@@ -632,6 +1303,13 @@ window.addEventListener('message', (event) => {
 
     // Update current URL for this provider
     if (typeof data.href === 'string' && data.href) {
+      // Ignore Gemini internal utility frames to avoid polluting state
+      try {
+        const u = new URL(data.href);
+        if (u.hostname === 'gemini.google.com' && (u.pathname === '/_/' || u.pathname.startsWith('/_/'))) {
+          return;
+        }
+      } catch (_) {}
       currentUrlByProvider[matchedKey] = data.href;
 
       // If this provider is currently visible, update the Open in Tab link
@@ -640,7 +1318,17 @@ window.addEventListener('message', (event) => {
       if (openInTab && visible) {
         openInTab.href = data.href;
         try { openInTab.title = data.href; } catch (_) {}
+        try { const b=document.getElementById('copyLink'); if (b) b.title = data.href; } catch (_) {}
       }
+
+      // Auto-save history for supported providers when a deep link is detected
+      try {
+        if (isDeepLink(matchedKey, data.href)) {
+          addHistory({ url: data.href, provider: matchedKey, title: data.title || '' });
+        }
+      } catch (_) {}
+      // Track last known title for this provider for better Add Current defaults
+      try { currentTitleByProvider[matchedKey] = data.title || ''; } catch (_) {}
     }
   } catch (_) {}
 });

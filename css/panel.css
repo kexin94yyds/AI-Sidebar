@@ -274,6 +274,238 @@ html {
 .toolbar a#openInTab:hover { background: #f8fafc; border-color: #dbe1e8; text-decoration: none; }
 .toolbar a#openInTab:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
 
+/* Copy Link button styled similar to Open in Tab */
+.toolbar button#copyLink {
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
+  color: #111827;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toolbar button#copyLink:hover { background: #f8fafc; border-color: #dbe1e8; }
+.toolbar button#copyLink:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
+
+/* History button */
+.toolbar button#historyBtn {
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
+  color: #111827;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toolbar button#historyBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
+.toolbar button#historyBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
+
+/* Add Current button */
+.toolbar button#addCurrentBtn {
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
+  color: #111827;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toolbar button#addCurrentBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
+.toolbar button#addCurrentBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
+
+/* Star/Favorites button */
+.toolbar button#favoritesBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
+  color: #111827;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  gap: 6px;
+}
+.toolbar button#favoritesBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
+.toolbar button#favoritesBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
+
+/* History dropdown panel */
+.history-panel {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  min-width: 360px;
+  max-height: 60vh;
+  /* Prevent width jumping when vertical scrollbar toggles */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable both-edges;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.18);
+  z-index: 2147483646; /* ensure above any iframe/backdrop */
+  /* Keep typography stable regardless of focus/zoom quirks */
+  font-size: 13px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* Backdrop to catch outside clicks, placed under history panel */
+.history-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent; /* invisible click-catcher */
+  z-index: 2147483645;
+}
+
+/* Favorites dropdown panel (shares style with history) */
+.favorites-panel {
+  position: absolute;
+  top: 88px; /* slightly below toolbar to sit under buttons */
+  right: 16px;
+  min-width: 360px;
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable both-edges;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.18);
+  z-index: 2147483646;
+  font-size: 13px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+.favorites-backdrop { position: fixed; inset: 0; background: transparent; z-index: 2147483645; }
+
+.favorites-panel .fp-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #eef2f7; font-weight: 600; }
+.favorites-panel .fp-actions button { margin-left: 8px; height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; }
+.favorites-panel .fp-list { padding: 6px 0; }
+.favorites-panel .fp-item { display: flex; align-items: center; padding: 8px 12px; gap: 8px; }
+.favorites-panel .fp-item:hover { background: #f8fafc; }
+.favorites-panel .fp-provider { font-size: 11px; color: #64748b; min-width: 72px; }
+.favorites-panel .fp-title { flex: 1; font-size: 12px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+.favorites-panel .fp-title:hover { background: #eef2ff; }
+.favorites-panel .fp-title-input { flex: 1; font-size: 12px; color: #0f172a; border: 1px solid #e5e7eb; border-radius: 6px; padding: 2px 6px; }
+.favorites-panel .fp-time { font-size: 11px; color: #94a3b8; margin-left: 6px; }
+.favorites-panel .fp-actions-row { display: inline-flex; gap: 6px; }
+.favorites-panel .fp-actions-row a, .favorites-panel .fp-actions-row button { font-size: 11px; color: #2563eb; background: transparent; border: none; cursor: pointer; }
+.favorites-panel .fp-search-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px 4px 12px; }
+.favorites-panel .fp-search-icon { color: #94a3b8; font-size: 14px; }
+.favorites-panel .fp-search-input { flex: 1; height: 32px; padding: 0 12px; border: 1px solid #e8eefc; background: #fff; border-radius: 16px; font-size: 13px; line-height: 32px; box-sizing: border-box; box-shadow: inset 0 0 0 1px rgba(37,99,235,0.05); }
+.history-panel .hp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f7;
+  font-weight: 600;
+}
+.history-panel .hp-actions button {
+  margin-left: 8px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+}
+.history-panel .hp-list { padding: 6px 0; }
+.history-panel .hp-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+}
+.history-panel .hp-item:hover { background: #f8fafc; }
+.history-panel .hp-item .hp-provider {
+  font-size: 11px;
+  color: #64748b;
+  min-width: 72px;
+}
+.history-panel .hp-item .hp-title {
+  flex: 1;
+  font-size: 12px;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+.history-panel .hp-item .hp-title:hover { background: #eef2ff; }
+.history-panel .hp-title-input {
+  flex: 1;
+  font-size: 12px;
+  color: #0f172a;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.history-panel .hp-item .hp-time { font-size: 11px; color: #94a3b8; margin-left: 6px; }
+.history-panel .hp-item .hp-actions { display: inline-flex; gap: 6px; }
+.history-panel .hp-item .hp-actions a,
+.history-panel .hp-item .hp-actions button {
+  font-size: 11px;
+  color: #2563eb;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.history-panel .hp-item .hp-actions .hp-star { color: #cbd5e1; }
+.history-panel .hp-item .hp-actions .hp-star.active { color: #f59e0b; }
+
+/* History search input */
+.history-panel .hp-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 4px 12px;
+}
+.history-panel .hp-search-icon {
+  color: #94a3b8;
+  font-size: 14px;
+}
+.history-panel .hp-search-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #e8eefc;
+  background: #fff;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 32px; /* keep text and input height stable */
+  box-sizing: border-box; /* avoid width changes due to borders/padding */
+  box-shadow: inset 0 0 0 1px rgba(37,99,235,0.05);
+}
+
 /* spacing rules kept minimal */
 
 /* Reveal toolbar when hovering top edge or toolbar itself */
