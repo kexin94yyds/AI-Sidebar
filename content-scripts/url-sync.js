@@ -246,12 +246,82 @@
     const resolveDeepseekTitle = () => {
       try {
         if (location.hostname !== 'chat.deepseek.com') return null;
-        const selected = document.querySelector('[aria-current="page"], [aria-selected="true"]');
-        if (selected && selected.textContent && selected.textContent.trim().length>0) return selected.textContent.trim();
-        const h = document.querySelector('h1, header h2');
-        if (h && h.textContent && h.textContent.trim()) return h.textContent.trim();
+        const notUseful = (t) => {
+          if (!t) return true;
+          const s = t.trim().toLowerCase();
+          return s.length === 0 || s === 'deepseek' || s === 'new chat' || s === 'start new chat' || s === 'chat';
+        };
+
+        // Prefer the selected item in a left navigation if present
+        const navScope = deepFind(document, (el)=> el && (el.tagName==='NAV' || el.tagName==='ASIDE' || (el.getAttribute && el.getAttribute('role')==='navigation')));
+        if (navScope) {
+          // (a) selected/current item text
+          const sel = deepFind(navScope, (el)=> el && el.getAttribute && (el.getAttribute('aria-current')==='page' || el.getAttribute('aria-selected')==='true' || /\bactive\b|\bselected\b/.test((el.className||''))) && el.textContent && el.textContent.trim());
+          if (sel && sel.textContent && !notUseful(sel.textContent)) {
+            const txt = sel.textContent.trim();
+            dbg('deepseek.title.nav.selected', txt);
+            return txt;
+          }
+          // (b) anchor for current session id
+          const a = deepFind(navScope, (el)=> el && el.tagName==='A' && /\/(sessions|s)\//.test(el.getAttribute('href')||'') && el.textContent && el.textContent.trim());
+          if (a && a.textContent && !notUseful(a.textContent)) {
+            const txt = a.textContent.trim();
+            dbg('deepseek.title.nav.anchor', (a.getAttribute && a.getAttribute('href'))||'', txt);
+            return txt;
+          }
+          // (c) any element with a likely title class
+          const hasLikelyTitleClass = (el) => {
+            try {
+              const names = Array.from(el.classList || []).map(c => c.toLowerCase());
+              const hasTitle = names.some(c => /title/.test(c));
+              const hasDomain = names.some(c => /(conv|conversation|session|chat|thread)/.test(c));
+              return hasTitle && hasDomain;
+            } catch (_) { return false; }
+          };
+          const tEl = deepFind(navScope, (el)=> hasLikelyTitleClass(el) && el.textContent && el.textContent.trim());
+          if (tEl && tEl.textContent && !notUseful(tEl.textContent)) {
+            const txt = tEl.textContent.trim();
+            dbg('deepseek.title.nav.class', txt);
+            return txt;
+          }
+        }
+
+        // Page header
+        const h = document.querySelector('h1, header h2, [data-testid="conversation-title"]');
+        if (h && h.textContent && !notUseful(h.textContent)) {
+          const txt = h.textContent.trim();
+          dbg('deepseek.title.header', txt);
+          return txt;
+        }
+        // OpenGraph title
         const og = document.querySelector('meta[property="og:title"], meta[name="og:title"]');
-        if (og && og.content && og.content.trim()) return og.content.trim();
+        if (og && og.content && !notUseful(og.content)) {
+          const txt = og.content.trim();
+          dbg('deepseek.title.og', txt);
+          return txt;
+        }
+        // First meaningful line in main content as last resort
+        const main = document.querySelector('main, [role="main"], body');
+        if (main) {
+          const good = (txt) => {
+            if (!txt) return false;
+            const t = txt.replace(/\s+/g,' ').trim();
+            if (t.length < 4 || t.length > 140) return false; // allow shorter than Gemini for CJK
+            if (notUseful(t)) return false;
+            return true;
+          };
+          const p = deepFind(main, (el)=> {
+            if (!el) return false;
+            const tag = (el.tagName||'').toLowerCase();
+            if (['nav','aside','button','svg','img','input','textarea','select','script','style'].includes(tag)) return false;
+            return ((tag==='p' || tag==='li' || (el.getAttribute && (el.getAttribute('role')==='listitem' || el.getAttribute('role')==='article'))) && el.textContent && good(el.textContent));
+          });
+          if (p && p.textContent) {
+            const txt = p.textContent.trim();
+            dbg('deepseek.title.firstLine', txt);
+            return txt;
+          }
+        }
       } catch (_) {}
       return null;
     };
@@ -280,6 +350,27 @@
       return null;
     };
 
+    // Google Search helpers (provider 'google')
+    const resolveGoogleTitle = () => {
+      try {
+        if (location.hostname !== 'www.google.com') return null;
+        const notUseful = (t) => !t || /^google$/i.test(String(t).trim());
+        // 1) Input box value (name=q)
+        const qInput = document.querySelector('input[name="q"]');
+        if (qInput && qInput.value && !notUseful(qInput.value)) return qInput.value.trim();
+        // 2) URL param q
+        const qp = new URL(location.href).searchParams.get('q');
+        if (qp && !notUseful(qp)) return qp.trim();
+        // 3) h1 header if present
+        const h1 = document.querySelector('h1');
+        if (h1 && h1.textContent && !notUseful(h1.textContent)) return h1.textContent.trim();
+        // 4) og:title
+        const og = document.querySelector('meta[property="og:title"], meta[name="og:title"]');
+        if (og && og.content && !notUseful(og.content)) return og.content.trim();
+      } catch (_) {}
+      return null;
+    };
+
     // Sender
     let lastSent = '';
     let timer = null;
@@ -295,6 +386,7 @@
         resolvePerplexityTitle() ||
         resolveDeepseekTitle() ||
         resolveNotebookLMTitle() ||
+        resolveGoogleTitle() ||
         document.title || ''
       );
       const payload = { type: 'ai-url-changed', href: hrefNow, title, origin: String(location.origin) };
@@ -344,7 +436,7 @@
 
     // Provider-specific DOM observers
     try {
-      if (window.MutationObserver && (location.origin === 'https://gemini.google.com' || location.origin === 'https://chatgpt.com')) {
+      if (window.MutationObserver && (location.origin === 'https://gemini.google.com' || location.origin === 'https://chatgpt.com' || location.origin === 'https://chat.deepseek.com')) {
         const root = document.querySelector('main,[role="main"],#app,body');
         if (root) {
           const moDom = new MutationObserver(() => send(false, 'dom-mutation'));

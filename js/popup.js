@@ -280,25 +280,42 @@ function deriveTitle(provider, url, rawTitle) {
 }
 async function loadHistory() {
   try {
+    if (window.HistoryDB) {
+      await window.HistoryDB.migrateFromStorageIfAny();
+      return await window.HistoryDB.getAll();
+    }
+  } catch (_) {}
+  // Fallback to chrome.storage.local legacy (should be gone after migration)
+  try {
     const res = await new Promise((r)=> chrome.storage?.local.get([HISTORY_KEY], (v)=> r(v||{})));
     const arr = Array.isArray(res[HISTORY_KEY]) ? res[HISTORY_KEY] : [];
     return arr;
   } catch (_) { return []; }
 }
 async function saveHistory(list) {
+  try {
+    if (window.HistoryDB) {
+      await window.HistoryDB.replace(Array.isArray(list) ? list : []);
+      return;
+    }
+  } catch (_) {}
   try { await chrome.storage?.local.set({ [HISTORY_KEY]: list }); } catch (_) {}
 }
 async function addHistory(entry) {
   try {
+    if (window.HistoryDB) {
+      const suggested = typeof entry.title === 'string' ? entry.title : '';
+      const title = entry && entry.needsTitle ? suggested : deriveTitle(entry.provider, entry.url, suggested);
+      await window.HistoryDB.add({ ...entry, title, time: Date.now() });
+      return await window.HistoryDB.getAll();
+    }
+  } catch (_) {}
+  // Legacy fallback
+  try {
     const list = await loadHistory();
-    // de-dup by url; newest first
     const filtered = list.filter((x)=> x && x.url !== entry.url);
-    // If caller wants inline rename, we may still prefill a suggested title.
-    // Use provided title when available; otherwise fall back to derived.
     const suggested = typeof entry.title === 'string' ? entry.title : '';
-    const title = entry && entry.needsTitle
-      ? suggested
-      : deriveTitle(entry.provider, entry.url, suggested);
+    const title = entry && entry.needsTitle ? suggested : deriveTitle(entry.provider, entry.url, suggested);
     const next = [{...entry, title, time: Date.now()}].concat(filtered).slice(0, 500);
     await saveHistory(next);
     return next;
@@ -321,12 +338,21 @@ function isDeepLink(providerKey, href) {
       // NotebookLM uses a variety of routes; treat any non-root path as a deep link
       return (u.pathname && u.pathname !== '/' && u.pathname !== '/u/0' && u.pathname !== '/u/1');
     }
+    if (providerKey === 'google') {
+      // Consider Google deep link when search query present
+      return (u.hostname === 'www.google.com' && u.pathname === '/search' && !!u.searchParams.get('q'));
+    }
   } catch (_) {}
   return false;
 }
 function historyProviderLabel(key) {
   const m = PROVIDERS[key];
   return (m && m.label) || key;
+}
+function normalizeUrlAttr(s) {
+  if (!s) return s;
+  // Decode common HTML entity for '&' to match stored URL
+  return s.replace(/&amp;/g, '&');
 }
 async function renderHistoryPanel() {
   try {
@@ -380,14 +406,24 @@ async function renderHistoryPanel() {
     });
     panel.querySelectorAll('.hp-copy')?.forEach((btn)=>{
       btn.addEventListener('click', async (e)=>{
-        try { await navigator.clipboard.writeText(e.currentTarget.getAttribute('data-url')); } catch (_) {}
+        try {
+          const raw = e.currentTarget.getAttribute('data-url');
+          const url = normalizeUrlAttr(raw);
+          await navigator.clipboard.writeText(url);
+        } catch (_) {}
       });
     });
     panel.querySelectorAll('.hp-remove')?.forEach((btn)=>{
       btn.addEventListener('click', async (e)=>{
-        const url = e.currentTarget.getAttribute('data-url');
-        const list = await loadHistory();
-        await saveHistory(list.filter((x)=> x.url !== url));
+        const url = normalizeUrlAttr(e.currentTarget.getAttribute('data-url'));
+        try {
+          if (window.HistoryDB) {
+            await window.HistoryDB.removeByUrl(url);
+          } else {
+            const list = await loadHistory();
+            await saveHistory(list.filter((x)=> x.url !== url));
+          }
+        } catch (_) {}
         renderHistoryPanel();
       });
     });
@@ -421,7 +457,7 @@ async function renderHistoryPanel() {
     const beginInlineEdit = (titleEl, options) => {
       try {
         const row = titleEl.closest('.hp-item');
-        const url = row?.getAttribute('data-url');
+        const url = normalizeUrlAttr(row?.getAttribute('data-url'));
         const orig = titleEl.textContent || '';
         const input = document.createElement('input');
         input.type = 'text';
