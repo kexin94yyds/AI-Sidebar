@@ -245,12 +245,22 @@ const currentTitleByProvider = {}; // { [providerKey]: string }
 
 // ---- History store helpers ----
 const HISTORY_KEY = 'aiLinkHistory';
+const TITLE_MAX_LEN = 50;
 // When set, renderHistoryPanel will start inline edit for this URL
 let __pendingInlineEditUrl = null;
 // When true, the inline edit that starts should close panel on Enter
 let __pendingInlineEditCloseOnEnter = false;
 // Persist history panel search across re-renders
 let __historySearchQuery = '';
+
+function escapeAttr(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 function deriveTitle(provider, url, rawTitle) {
   try {
     const label = historyProviderLabel(provider) || '';
@@ -277,6 +287,13 @@ function deriveTitle(provider, url, rawTitle) {
     const shortId = id ? id.slice(0, 8) : '';
     return [label || provider, shortId].filter(Boolean).join(' ');
   } catch (_) { return rawTitle || historyProviderLabel(provider) || provider || 'Conversation'; }
+}
+function clampTitle(s, max = TITLE_MAX_LEN) {
+  try {
+    const str = String(s || '').trim();
+    if (str.length <= max) return str;
+    return str.slice(0, Math.max(0, max - 1)) + '…';
+  } catch (_) { return s; }
 }
 async function loadHistory() {
   try {
@@ -305,7 +322,7 @@ async function addHistory(entry) {
   try {
     if (window.HistoryDB) {
       const suggested = typeof entry.title === 'string' ? entry.title : '';
-      const title = entry && entry.needsTitle ? suggested : deriveTitle(entry.provider, entry.url, suggested);
+      const title = clampTitle(entry && entry.needsTitle ? suggested : deriveTitle(entry.provider, entry.url, suggested));
       await window.HistoryDB.add({ ...entry, title, time: Date.now() });
       return await window.HistoryDB.getAll();
     }
@@ -315,7 +332,7 @@ async function addHistory(entry) {
     const list = await loadHistory();
     const filtered = list.filter((x)=> x && x.url !== entry.url);
     const suggested = typeof entry.title === 'string' ? entry.title : '';
-    const title = entry && entry.needsTitle ? suggested : deriveTitle(entry.provider, entry.url, suggested);
+    const title = clampTitle(entry && entry.needsTitle ? suggested : deriveTitle(entry.provider, entry.url, suggested));
     const next = [{...entry, title, time: Date.now()}].concat(filtered).slice(0, 500);
     await saveHistory(next);
     return next;
@@ -354,6 +371,28 @@ function normalizeUrlAttr(s) {
   // Decode common HTML entity for '&' to match stored URL
   return s.replace(/&amp;/g, '&');
 }
+
+// Normalize URL for robust equality checks (align with HistoryDB.removeByUrl)
+function normalizeUrlForMatch(uStr) {
+  try {
+    const u = new URL(String(uStr));
+    u.hash = '';
+    u.hostname = u.hostname.toLowerCase();
+    if (u.search && u.search.length > 1) {
+      const sp = new URLSearchParams(u.search);
+      const sorted = new URLSearchParams();
+      Array.from(sp.keys()).sort().forEach(k => {
+        const vals = sp.getAll(k);
+        vals.sort().forEach(v => sorted.append(k, v));
+      });
+      u.search = sorted.toString() ? `?${sorted.toString()}` : '';
+    }
+    if (u.pathname === '/') u.pathname = '';
+    return u.toString();
+  } catch (_) {
+    return String(uStr || '');
+  }
+}
 async function renderHistoryPanel() {
   try {
     const panel = document.getElementById('historyPanel');
@@ -366,23 +405,22 @@ async function renderHistoryPanel() {
       const ds = date.toLocaleString();
       // Always show an informative title. If storage carries needsTitle with empty title,
       // fall back to a derived title so the row never appears blank.
-      const titleToShow = (it && it.title && it.title.trim())
+      const titleToShow = clampTitle((it && it.title && it.title.trim())
         ? it.title
-        : (deriveTitle(it.provider, it.url, '') || '');
+        : (deriveTitle(it.provider, it.url, '') || ''));
       const escTitle = titleToShow.replace(/[<>]/g,'');
       const isStarred = favSet.has(it.url);
       const starClass = isStarred ? 'hp-star active' : 'hp-star';
       const starTitle = isStarred ? 'Unstar' : 'Star';
-      return `<div class="hp-item" data-url="${it.url}">
+      return `<div class="hp-item" data-url="${escapeAttr(it.url)}">
         <span class="hp-provider">${historyProviderLabel(it.provider||'')}</span>
-        <span class="hp-title" data-url="${it.url}" title="${escTitle}">${escTitle}</span>
+        <span class="hp-title" data-url="${escapeAttr(it.url)}" title="${escTitle}">${escTitle}</span>
         <span class="hp-time">${ds}</span>
         <span class="hp-actions">
-          <a href="${it.url}" target="_blank" rel="noreferrer">Open</a>
-          <button class="hp-copy" data-url="${it.url}">Copy</button>
-          <button class="hp-rename" data-url="${it.url}">Rename</button>
-          <button class="${starClass}" data-url="${it.url}" title="${starTitle}">★</button>
-          <button class="hp-remove" data-url="${it.url}">Remove</button>
+          <a href="${escapeAttr(it.url)}" target="_blank" rel="noreferrer">Open</a>
+          <button class="hp-copy" data-url="${escapeAttr(it.url)}">Copy</button>
+          <button class="hp-rename" data-url="${escapeAttr(it.url)}">Rename</button>
+          <button class="${starClass}" data-url="${escapeAttr(it.url)}" title="${starTitle}">★</button>
         </span>
       </div>`;
     }).join('');
@@ -413,32 +451,7 @@ async function renderHistoryPanel() {
         } catch (_) {}
       });
     });
-    // Delegate remove clicks to handle dynamic rerenders reliably
-    try {
-      if (panel._hpRemoveHandler) panel.removeEventListener('click', panel._hpRemoveHandler, true);
-      panel._hpRemoveHandler = async (e) => {
-        const target = e.target;
-        if (!target || !(target.classList && target.classList.contains('hp-remove'))) return;
-        try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
-        const raw = target.getAttribute('data-url');
-        const url = normalizeUrlAttr(raw || '');
-        try { if (localStorage.getItem('insidebar_debug_history')==='1') console.log('[history] remove click', url); } catch(_){}
-        // Optimistic removal
-        try { const row = target.closest('.hp-item'); if (row && row.parentNode) row.parentNode.removeChild(row); } catch(_){}
-        try {
-          if (url) {
-            if (window.HistoryDB) {
-              await window.HistoryDB.removeByUrl(url);
-            } else {
-              const list = await loadHistory();
-              await saveHistory(list.filter((x)=> x.url !== url));
-            }
-          }
-        } catch (err) { try { console.warn('remove error', err); } catch(_){} }
-        renderHistoryPanel();
-      };
-      panel.addEventListener('click', panel._hpRemoveHandler, true);
-    } catch (_) {}
+    // Remove action removed by request; Clear-all remains available
     // Star/unstar from history list
     panel.querySelectorAll('.hp-star')?.forEach((btn)=>{
       btn.addEventListener('click', async (e)=>{
@@ -484,8 +497,8 @@ async function renderHistoryPanel() {
             const list = await loadHistory();
             const idx = list.findIndex((x)=> x.url === url);
             if (idx >= 0 && save && newTitle) {
-              // Clear needsTitle once a custom title is saved
-              list[idx] = { ...list[idx], title: newTitle, needsTitle: false };
+              // Clear needsTitle once a custom title is saved and clamp length
+              list[idx] = { ...list[idx], title: clampTitle(newTitle), needsTitle: false };
               await saveHistory(list);
             }
           } catch (_) {}
@@ -601,9 +614,9 @@ async function addFavorite(entry) {
     const list = await loadFavorites();
     const filtered = list.filter((x)=> x && x.url !== entry.url);
     const suggested = typeof entry.title === 'string' ? entry.title : '';
-    const title = entry && entry.needsTitle
+    const title = clampTitle(entry && entry.needsTitle
       ? suggested
-      : deriveTitle(entry.provider, entry.url, suggested);
+      : deriveTitle(entry.provider, entry.url, suggested));
     const next = [{...entry, title, time: Date.now()}].concat(filtered).slice(0, 500);
     await saveFavorites(next);
     return next;
@@ -618,9 +631,9 @@ async function renderFavoritesPanel() {
     const rows = (list || []).map((it)=>{
       const date = new Date(it.time||Date.now());
       const ds = date.toLocaleString();
-      const titleToShow = (it && it.title && it.title.trim())
+      const titleToShow = clampTitle((it && it.title && it.title.trim())
         ? it.title
-        : (deriveTitle(it.provider, it.url, '') || '');
+        : (deriveTitle(it.provider, it.url, '') || ''));
       const escTitle = titleToShow.replace(/[<>]/g,'');
       return `<div class="fp-item" data-url="${it.url}">
         <span class="fp-provider">${historyProviderLabel(it.provider||'')}</span>
@@ -638,6 +651,7 @@ async function renderFavoritesPanel() {
 
     panel.querySelector('#fp-close')?.addEventListener('click', ()=> panel.style.display='none');
     panel.querySelector('#fp-clear-all')?.addEventListener('click', async ()=>{ await saveFavorites([]); renderFavoritesPanel(); });
+    
     panel.querySelector('#fp-add-current')?.addEventListener('click', async ()=>{
       try {
         const a = document.getElementById('openInTab');
@@ -683,7 +697,7 @@ async function renderFavoritesPanel() {
             const list = await loadFavorites();
             const idx = list.findIndex((x)=> x.url === url);
             if (idx >= 0 && save && newTitle) {
-              list[idx] = { ...list[idx], title: newTitle };
+              list[idx] = { ...list[idx], title: clampTitle(newTitle) };
               await saveFavorites(list);
             }
           } catch (_) {}
@@ -779,6 +793,8 @@ const showOnlyFrame = (container, key) => {
 };
 
 
+let __suppressNextFrameFocus = false; // when true, do not focus iframe/webview on switch (e.g., Tab cycling)
+
 const ensureFrame = (container, key, provider) => {
   if (!cachedFrames[key]) {
     const useWebview = !!provider.useWebview;
@@ -845,18 +861,22 @@ const ensureFrame = (container, key, provider) => {
     } catch (_) {
       cachedFrameMeta[key] = { origin: '' };
     }
-    const focusHandler = () => { try { view.focus(); } catch(_) {} };
-    if (tag === 'iframe') {
-      view.addEventListener('load', focusHandler);
-    } else {
-      view.addEventListener('contentload', focusHandler);
+    if (!__suppressNextFrameFocus) {
+      const focusHandler = () => { try { view.focus(); } catch(_) {} };
+      if (tag === 'iframe') {
+        view.addEventListener('load', focusHandler);
+      } else {
+        view.addEventListener('contentload', focusHandler);
+      }
     }
   }
   // hide message overlay if any
   const msg = document.getElementById('provider-msg');
   if (msg) msg.style.display = 'none';
   showOnlyFrame(container, key);
-  try { cachedFrames[key].focus(); } catch(_) {}
+  if (!__suppressNextFrameFocus) {
+    try { cachedFrames[key].focus(); } catch(_) {}
+  }
 };
 
 const renderMessage = (container, message) => {
@@ -1269,9 +1289,14 @@ const initializeBar = async () => {
       });
     }
 
+    // Global hotkey within panel: Star current + open rename
+    // (Hotkey support removed)
+
     // Close with Escape
     document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') hideFavoritesPanel(); }, true);
   } catch (_) {}
+
+  // (Shortcuts button removed)
 
   // Add Current button in toolbar
   try {
@@ -1305,6 +1330,72 @@ const initializeBar = async () => {
   } catch (_) {}
   try { (typeof ensureAccessFor === 'function') && ensureAccessFor(mergedCurrent.baseUrl); } catch(_) {}
 
+  // Helper: cycle provider by direction (-1 prev, +1 next)
+  const cycleProvider = async (dir) => {
+    try {
+      const container = document.getElementById('iframe');
+      const openInTab = document.getElementById('openInTab');
+      const btns = Array.from(document.querySelectorAll('#provider-tabs button[data-provider-id]'));
+      const order = btns.map(b => b.dataset.providerId).filter(Boolean);
+      if (!order.length) return;
+      const cur = await getProvider();
+      let idx = order.indexOf(cur);
+      if (idx < 0) idx = 0;
+      const nextIdx = (idx + (dir || 1) + order.length) % order.length;
+      const nextKey = order[nextIdx];
+      const overridesNow = await getOverrides();
+      const customProviders = await loadCustomProviders();
+      const ALL = { ...PROVIDERS };
+      (customProviders || []).forEach((c) => { ALL[c.key] = c; });
+      const p = effectiveConfig(ALL, nextKey, overridesNow);
+      await setProvider(nextKey);
+      if (openInTab) {
+        const preferred = (currentUrlByProvider && currentUrlByProvider[nextKey]) || p.baseUrl;
+        openInTab.href = preferred;
+        try { openInTab.title = preferred; } catch (_) {}
+      }
+      try {
+        const origin = new URL(p.baseUrl || p.iframeUrl || '').origin;
+        if (origin) chrome.runtime.sendMessage({ type: 'ai-add-host', origin });
+      } catch (_) {}
+      // Avoid focusing inside the frame so Tab stays captured by the panel
+      __suppressNextFrameFocus = true;
+      if (p.authCheck) {
+        const auth = await p.authCheck();
+        if (auth.state === 'authorized') {
+          ensureFrame(container, nextKey, p);
+        } else {
+          renderMessage(container, auth.message || 'Please login.');
+        }
+      } else {
+        ensureFrame(container, nextKey, p);
+      }
+      // Reset suppression and bring focus back to the panel container
+      __suppressNextFrameFocus = false;
+      renderProviderTabs(nextKey);
+      try {
+        const tabsEl = document.getElementById('provider-tabs');
+        if (tabsEl) { tabsEl.tabIndex = -1; tabsEl.focus(); }
+        else if (document && document.body && document.body.focus) { document.body.focus(); }
+      } catch (_) {}
+    } catch (_) {}
+  };
+  try { window.__AIPanelCycleProvider = cycleProvider; } catch (_) {}
+
+  // Keyboard: Tab to cycle providers (Shift+Tab reverse)
+  try {
+    document.addEventListener('keydown', async (e) => {
+      try {
+        if (e.key !== 'Tab') return;
+        // Force-bind Tab to provider switching within the side panel
+        e.preventDefault();
+        e.stopPropagation();
+        const dir = e.shiftKey ? -1 : 1;
+        await cycleProvider(dir);
+      } catch (_) {}
+    }, true);
+  } catch (_) {}
+
   // Initial render
   if (mergedCurrent.authCheck) {
     const auth = await mergedCurrent.authCheck();
@@ -1321,6 +1412,8 @@ const initializeBar = async () => {
   // (keyboard command & navigation removed)
 };
 
+// (Global command message listener removed)
+
 // Also close panel on Escape (backdrop version handles outside clicks)
 try {
   document.addEventListener('keydown', (e) => {
@@ -1334,7 +1427,16 @@ try {
   window.addEventListener('message', (event) => {
     try {
       const data = event.data || {};
-      if (!data || data.type !== 'ai-url-changed') return;
+      if (!data || !data.type) return;
+      if (data.type === 'ai-tab-cycle') {
+        const dir = (data.dir === 'prev') ? -1 : 1;
+        // When message comes from iframe, don't focus the frame after switching
+        __suppressNextFrameFocus = true;
+        try { if (window.__AIPanelCycleProvider) window.__AIPanelCycleProvider(dir); } catch (_) {}
+        __suppressNextFrameFocus = false;
+        return;
+      }
+      if (data.type !== 'ai-url-changed') return;
 
     // Find which provider frame this message came from by comparing contentWindow
     let matchedKey = null;

@@ -405,6 +405,24 @@
       timer = setTimeout(doPost, 100);
     };
 
+    // Intercept Tab inside embedded provider frame to cycle providers in side panel
+    try {
+      // Only when this frame is embedded (running inside the side panel iframe)
+      if (window.top && window.top !== window) {
+        window.addEventListener('keydown', (e) => {
+          try {
+            if (e.key !== 'Tab') return;
+            // Always capture; optional future: allow pass-through via modifier
+            e.preventDefault();
+            e.stopPropagation();
+            const dir = e.shiftKey ? 'prev' : 'next';
+            const payload = { type: 'ai-tab-cycle', dir };
+            try { window.top.postMessage(payload, '*'); } catch (_) {}
+          } catch (_) {}
+        }, true);
+      }
+    } catch (_) {}
+
     // Initial emit
     send(true, 'init');
 

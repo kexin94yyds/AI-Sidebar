@@ -134,6 +134,35 @@
 
   async function removeByUrl(url) {
     if (!url) return;
+
+    // Normalize URL for robust matching (ignore fragments, sort query params, lowercase host)
+    const normalize = (uStr) => {
+      try {
+        const u = new URL(String(uStr));
+        // Drop hash, lowercase hostname, keep protocol and port
+        u.hash = '';
+        u.hostname = u.hostname.toLowerCase();
+        // Sort query params for stable comparison
+        if (u.search && u.search.length > 1) {
+          const sp = new URLSearchParams(u.search);
+          const sorted = new URLSearchParams();
+          Array.from(sp.keys()).sort().forEach(k => {
+            const vals = sp.getAll(k);
+            vals.sort().forEach(v => sorted.append(k, v));
+          });
+          u.search = sorted.toString() ? `?${sorted.toString()}` : '';
+        }
+        // Remove trailing slash on root path only ("/" -> "")
+        if (u.pathname === '/') u.pathname = '';
+        return u.toString();
+      } catch (_) {
+        // Fallback to string as-is
+        return String(uStr);
+      }
+    };
+
+    const targetNorm = normalize(url);
+
     return withStore('readwrite', (os) => new Promise((resolve, reject) => {
       try {
         const idx = os.index('url');
@@ -146,11 +175,13 @@
             del.onerror = () => reject(del.error);
             return;
           }
-          // Fallback: scan all and delete matches (in case of encoding mismatch or duplicates)
+          // Fallback: scan all and delete normalized matches (entity/param order/fragment differences)
           const all = os.getAll();
           all.onsuccess = () => {
             const arr = all.result || [];
-            const toDelete = arr.filter(e => e && String(e.url) === String(url)).map(e => e.id);
+            const toDelete = arr
+              .filter(e => e && (String(e.url) === String(url) || normalize(e.url) === targetNorm))
+              .map(e => e.id);
             if (toDelete.length === 0) return resolve();
             toDelete.forEach(id => os.delete(id));
             resolve();
@@ -158,11 +189,13 @@
           all.onerror = () => reject(all.error);
         };
         q.onerror = () => {
-          // If index query fails, attempt fallback delete by full scan
+          // If index query fails, attempt fallback delete by full scan with normalization
           const all = os.getAll();
           all.onsuccess = () => {
             const arr = all.result || [];
-            const toDelete = arr.filter(e => e && String(e.url) === String(url)).map(e => e.id);
+            const toDelete = arr
+              .filter(e => e && (String(e.url) === String(url) || normalize(e.url) === targetNorm))
+              .map(e => e.id);
             if (toDelete.length === 0) return resolve();
             toDelete.forEach(id => os.delete(id));
             resolve();

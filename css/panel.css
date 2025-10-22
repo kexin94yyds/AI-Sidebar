@@ -58,6 +58,7 @@ html {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: nowrap;
   padding: 0 12px;
   background: #ffffff;
   color: #0f172a;
@@ -253,6 +254,12 @@ html {
   text-decoration: none;
   font-size: 12px;
   font-weight: 600;
+  /* Prevent label wrapping and allow truncation */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  min-width: 0;
 }
 .toolbar a:hover { text-decoration: underline; }
 
@@ -290,6 +297,11 @@ html {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  min-width: 0;
 }
 .toolbar button#copyLink:hover { background: #f8fafc; border-color: #dbe1e8; }
 .toolbar button#copyLink:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
@@ -310,6 +322,11 @@ html {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  min-width: 0;
 }
 .toolbar button#historyBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
 .toolbar button#historyBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
@@ -330,6 +347,11 @@ html {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  min-width: 0;
 }
 .toolbar button#addCurrentBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
 .toolbar button#addCurrentBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
@@ -350,6 +372,11 @@ html {
   font-weight: 600;
   cursor: pointer;
   gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  min-width: 0;
 }
 .toolbar button#favoritesBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
 .toolbar button#favoritesBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
@@ -359,7 +386,10 @@ html {
   position: absolute;
   top: 52px;
   right: 16px;
-  min-width: 360px;
+  /* Responsive width: shrink/grow with page, bounded by min/max */
+  width: min(960px, calc(100% - 32px));
+  min-width: 320px;
+  max-width: calc(100% - 32px);
   max-height: 60vh;
   /* Prevent width jumping when vertical scrollbar toggles */
   overflow-y: auto;
@@ -450,6 +480,7 @@ html {
   font-size: 11px;
   color: #64748b;
   min-width: 72px;
+  flex: 0 0 72px; /* keep stable column but allow media overrides */
 }
 .history-panel .hp-item .hp-title {
   flex: 1;
@@ -507,6 +538,25 @@ html {
 }
 
 /* spacing rules kept minimal */
+
+/* Responsive adjustments for narrow widths */
+@media (max-width: 900px) {
+  .history-panel { width: calc(100% - 24px); right: 12px; }
+  .toolbar { right: 6px; left: 6px; gap: 6px; }
+  .toolbar a,
+  .toolbar button { font-size: 11px; }
+  .toolbar a,
+  .toolbar button { max-width: 140px; }
+}
+@media (max-width: 720px) {
+  .history-panel .hp-item .hp-provider { min-width: 56px; flex: 0 0 56px; }
+  .history-panel .hp-item .hp-time { display: none; }
+  .history-panel .hp-item { gap: 6px; }
+  .history-panel .hp-item .hp-actions { gap: 4px; }
+  .toolbar { gap: 6px; }
+  .toolbar a,
+  .toolbar button { max-width: 120px; font-size: 10.5px; padding: 0 10px; }
+}
 
 /* Reveal toolbar when hovering top edge or toolbar itself */
 .hover-zone:hover ~ .toolbar,

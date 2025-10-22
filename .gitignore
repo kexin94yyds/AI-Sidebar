@@ -22,3 +22,5 @@ node_modules
 dist
 dist-ssr
 *.local
+\n+# Chrome unpacked extension: disallow underscore-prefixed system dir
+_metadata/
