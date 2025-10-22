@@ -184,6 +184,26 @@ function applyBaseDnrRules() {
       }
       ,
       {
+        "id": 17,
+        "priority": 1,
+        "action": {
+          "type": "modifyHeaders",
+          "responseHeaders": [
+            { "header": "content-security-policy", "operation": "remove" },
+            { "header": "content-security-policy-report-only", "operation": "remove" },
+            { "header": "x-frame-options", "operation": "remove" },
+            { "header": "cross-origin-opener-policy", "operation": "remove" },
+            { "header": "cross-origin-embedder-policy", "operation": "remove" },
+            { "header": "cross-origin-resource-policy", "operation": "remove" },
+            { "header": "permissions-policy", "operation": "remove" }
+          ]
+        },
+        "condition": {
+          "urlFilter": "https://aistudio.google.com/*",
+          "resourceTypes": ["main_frame", "sub_frame"]
+        }
+      },
+      {
         "id": 6,
         "priority": 1,
         "action": {
@@ -305,7 +325,7 @@ function applyBaseDnrRules() {
         }
       }
     ],
-    removeRuleIds: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+    removeRuleIds: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]
   });
 }
 

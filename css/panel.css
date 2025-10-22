@@ -763,3 +763,136 @@ html {
 #provider-tabs.collapsed .tabs-header {
   z-index: 100002;
 }
+
+/* Keyboard Shortcuts Settings Modal */
+.settings-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100010;
+}
+
+.settings-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.settings-modal-content {
+  position: relative;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 100011;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.settings-close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.settings-close-btn:hover {
+  background: #f1f5f9;
+}
+
+.settings-body {
+  padding: 20px;
+}
+
+.shortcut-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.shortcut-row label {
+  font-weight: 500;
+  color: #334155;
+  font-size: 14px;
+}
+
+.shortcut-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.shortcut-display {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #f8fafc;
+  font-family: monospace;
+}
+
+.record-btn {
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #5a84ff 0%, #436af7 100%);
+  color: white;
+  border: 1px solid #395fe0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: filter 0.2s;
+}
+
+.record-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.record-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.shortcut-info {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+  color: #0369a1;
+  margin-top: 12px;
+}

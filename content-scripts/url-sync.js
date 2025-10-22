@@ -342,10 +342,78 @@
     const resolveNotebookLMTitle = () => {
       try {
         if (location.hostname !== 'notebooklm.google.com') return null;
+        
+        const notUseful = (t) => {
+          if (!t) return true;
+          const s = t.trim().toLowerCase();
+          return s.length === 0 || s === 'notebooklm' || s === 'notebook' || s === 'untitled' || s === 'new notebook';
+        };
+        
+        // Priority 1: Use deepFind to locate .title-label-inner anywhere in DOM (handles Angular shadow DOM)
+        const titleInner = deepFind(document, (el) => {
+          if (!el || !el.classList) return false;
+          return Array.from(el.classList).some(c => c === 'title-label-inner');
+        });
+        if (titleInner && titleInner.textContent && !notUseful(titleInner.textContent)) {
+          const title = titleInner.textContent.trim();
+          dbg('notebooklm.title.titleInner', title);
+          return title;
+        }
+        
+        // Priority 2: Search for mat-title-large spans in title containers
+        const matTitle = deepFind(document, (el) => {
+          if (!el || el.tagName !== 'SPAN' || !el.classList) return false;
+          const hasMatClass = Array.from(el.classList).some(c => /mat-title-large/i.test(c));
+          if (!hasMatClass) return false;
+          // Must be inside a title-related container
+          const parent = el.parentElement;
+          if (!parent) return false;
+          const inTitle = parent.className && /title/i.test(parent.className);
+          return inTitle && el.textContent && el.textContent.trim();
+        });
+        if (matTitle && matTitle.textContent && !notUseful(matTitle.textContent)) {
+          const title = matTitle.textContent.trim();
+          dbg('notebooklm.title.matTitle', title);
+          return title;
+        }
+        
+        // Priority 3: Search for editable-project-title custom element
+        const editableTitle = deepFind(document, (el) => {
+          if (!el) return false;
+          const tag = (el.tagName || '').toLowerCase();
+          return tag === 'editable-project-title' && el.textContent && el.textContent.trim();
+        });
+        if (editableTitle && editableTitle.textContent && !notUseful(editableTitle.textContent)) {
+          const title = editableTitle.textContent.trim();
+          dbg('notebooklm.title.editableElement', title);
+          return title;
+        }
+        
+        // Priority 4: Look for input.title-input with value
+        const titleInput = deepFind(document, (el) => {
+          if (!el || el.tagName !== 'INPUT' || !el.classList) return false;
+          return Array.from(el.classList).some(c => /title-input/i.test(c)) && el.value && el.value.trim();
+        });
+        if (titleInput && titleInput.value && !notUseful(titleInput.value)) {
+          const title = titleInput.value.trim();
+          dbg('notebooklm.title.input', title);
+          return title;
+        }
+        
+        // Priority 5: Standard heading elements
         const h = document.querySelector('h1, header h2, [role="heading"][aria-level="1"], [role="heading"][aria-level="2"]');
-        if (h && h.textContent && h.textContent.trim()) return h.textContent.trim();
+        if (h && h.textContent && !notUseful(h.textContent)) {
+          const title = h.textContent.trim();
+          dbg('notebooklm.title.heading', title);
+          return title;
+        }
+        
+        // Priority 6: OpenGraph meta tag
         const og = document.querySelector('meta[property="og:title"], meta[name="og:title"]');
-        if (og && og.content && og.content.trim()) return og.content.trim();
+        if (og && og.content && !notUseful(og.content)) {
+          dbg('notebooklm.title.og', og.content.trim());
+          return og.content.trim();
+        }
       } catch (_) {}
       return null;
     };
@@ -459,6 +527,45 @@
         if (root) {
           const moDom = new MutationObserver(() => send(false, 'dom-mutation'));
           moDom.observe(root, { childList: true, subtree: true, attributes: false });
+        }
+      }
+    } catch (_) {}
+
+    // NotebookLM-specific title observer (watches for changes in project title)
+    try {
+      if (window.MutationObserver && location.origin === 'https://notebooklm.google.com') {
+        // Wait for DOM to be ready, then find and observe title elements
+        const observeNotebookLMTitle = () => {
+          const titleInner = deepFind(document, (el) => {
+            if (!el || !el.classList) return false;
+            return Array.from(el.classList).some(c => c === 'title-label-inner');
+          });
+          if (titleInner) {
+            const moTitle = new MutationObserver(() => send(false, 'notebooklm-title-change'));
+            moTitle.observe(titleInner, { subtree: true, characterData: true, childList: true });
+            dbg('notebooklm: observing title-label-inner for changes');
+            return true;
+          }
+          return false;
+        };
+        // Try immediately
+        if (!observeNotebookLMTitle()) {
+          // If not found, wait for DOM to load and retry
+          setTimeout(() => {
+            if (!observeNotebookLMTitle()) {
+              // Last attempt after longer delay (Angular app init)
+              setTimeout(observeNotebookLMTitle, 2000);
+            }
+          }, 500);
+        }
+        // Also observe main container for when title element is added dynamically
+        const mainContainer = document.querySelector('body');
+        if (mainContainer) {
+          const moContainer = new MutationObserver(() => {
+            observeNotebookLMTitle(); // Re-attempt to find and observe title
+            send(false, 'notebooklm-dom-mutation');
+          });
+          moContainer.observe(mainContainer, { childList: true, subtree: true });
         }
       }
     } catch (_) {}

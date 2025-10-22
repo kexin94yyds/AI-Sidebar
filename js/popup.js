@@ -94,6 +94,13 @@ const PROVIDERS = {
     iframeUrl: 'https://www.google.com/search?udm=50&aep=46&source=25q2-US-SearchSites-Site-CTA',
     authCheck: null
   },
+  aistudio: {
+    label: 'AI Studio',
+    icon: 'images/providers/google.png',
+    baseUrl: 'https://aistudio.google.com',
+    iframeUrl: 'https://aistudio.google.com/apps',
+    authCheck: null
+  },
   claude: {
     label: 'Claude',
     icon: 'images/providers/claude.png',
@@ -215,6 +222,26 @@ const setProvider = async (key) => {
   });
 };
 
+// Save and restore current URL for each provider
+const saveProviderUrl = async (providerKey, url) => {
+  try {
+    const data = await chrome.storage?.local.get(['providerUrls']);
+    const urls = data?.providerUrls || {};
+    urls[providerKey] = url;
+    await chrome.storage?.local.set({ providerUrls: urls });
+  } catch (_) {}
+};
+
+const getProviderUrl = async (providerKey) => {
+  try {
+    const data = await chrome.storage?.local.get(['providerUrls']);
+    return data?.providerUrls?.[providerKey] || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+
 const getProviderOrder = async () => {
   return new Promise((resolve) => {
     try {
@@ -233,6 +260,34 @@ const getProviderOrder = async () => {
 
 const saveProviderOrder = async (order) => {
   try { chrome.storage?.local.set({ providerOrder: order }); } catch (_) {}
+};
+
+// Star shortcut key management
+const getStarShortcut = async () => {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage?.local.get(['starShortcut'], (res) => {
+        resolve(res.starShortcut || { key: 'l', ctrl: true, shift: false, alt: false });
+      });
+    } catch (_) {
+      resolve({ key: 'l', ctrl: true, shift: false, alt: false });
+    }
+  });
+};
+
+const setStarShortcut = async (shortcut) => {
+  try {
+    await chrome.storage?.local.set({ starShortcut: shortcut });
+  } catch (_) {}
+};
+
+const matchesShortcut = (event, shortcut) => {
+  return (
+    event.key.toLowerCase() === shortcut.key.toLowerCase() &&
+    event.ctrlKey === shortcut.ctrl &&
+    event.shiftKey === shortcut.shift &&
+    event.altKey === shortcut.alt
+  );
 };
 
 // Cache embedded elements per provider to preserve state between switches
@@ -795,7 +850,7 @@ const showOnlyFrame = (container, key) => {
 
 let __suppressNextFrameFocus = false; // when true, do not focus iframe/webview on switch (e.g., Tab cycling)
 
-const ensureFrame = (container, key, provider) => {
+const ensureFrame = async (container, key, provider) => {
   if (!cachedFrames[key]) {
     const useWebview = !!provider.useWebview;
     const tag = useWebview ? 'webview' : 'iframe';
@@ -840,7 +895,15 @@ const ensureFrame = (container, key, provider) => {
         } catch (_) {}
       });
     }
-    view.src = provider.iframeUrl;
+    // Try to restore last visited URL for this provider
+    const savedUrl = await getProviderUrl(key);
+    let urlToLoad = provider.iframeUrl;
+    if (savedUrl) {
+      urlToLoad = savedUrl;
+      dbg('ensureFrame:', key, 'restored URL:', savedUrl);
+    }
+    view.src = urlToLoad;
+    dbg('ensureFrame:', key, 'final URL:', urlToLoad);
     view.style.width = '100%';
     view.style.height = '100%';
     container.appendChild(view);
@@ -1027,12 +1090,12 @@ const renderProviderTabs = async (currentProviderKey) => {
       if (p.authCheck) {
         const auth = await p.authCheck();
         if (auth.state === 'authorized') {
-          ensureFrame(container, key, p);
+          await ensureFrame(container, key, p);
         } else {
           renderMessage(container, auth.message || 'Please login.');
         }
       } else {
-        ensureFrame(container, key, p);
+        await ensureFrame(container, key, p);
       }
 
       // 更新活动状态
@@ -1279,8 +1342,8 @@ const initializeBar = async () => {
     window.showFavoritesPanel = showFavoritesPanel;
 
     if (fBtn && panel) {
+      // Click Favorites button to toggle favorites panel (show all starred items)
       fBtn.addEventListener('click', async () => {
-        await starCurrentAndOpenRename();
         if (panel.style.display === 'none' || !panel.style.display) {
           await showFavoritesPanel();
         } else {
@@ -1289,8 +1352,44 @@ const initializeBar = async () => {
       });
     }
 
-    // Global hotkey within panel: Star current + open rename
-    // (Hotkey support removed)
+    // Global keyboard shortcut to star current page (customizable)
+    let __starShortcut = null;
+    (async () => {
+      __starShortcut = await getStarShortcut();
+    })();
+    
+    document.addEventListener('keydown', async (e) => {
+      try {
+        if (!__starShortcut) return;
+        if (matchesShortcut(e, __starShortcut)) {
+          // Check if user is typing in input/textarea
+          const el = document.activeElement;
+          const tag = (el && el.tagName) ? el.tagName.toLowerCase() : '';
+          if (tag === 'input' || tag === 'textarea') return; // Allow typing in inputs
+          
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // Star current page
+          const a = document.getElementById('openInTab');
+          const href = a && a.href;
+          const provider = (await getProvider())||'chatgpt';
+          if (href) {
+            const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
+            await addFavorite({ url: href, provider, title: suggested, needsTitle: false });
+            // Show brief feedback
+            try {
+              const btn = document.getElementById('favoritesBtn');
+              if (btn) {
+                const oldText = btn.textContent;
+                btn.textContent = '✓ Starred';
+                setTimeout(() => { btn.textContent = oldText; }, 1200);
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }, true);
 
     // Close with Escape
     document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') hideFavoritesPanel(); }, true);
@@ -1298,36 +1397,87 @@ const initializeBar = async () => {
 
   // (Shortcuts button removed)
 
-  // Add Current button in toolbar
+  // Settings button handler
   try {
-    const addBtn = document.getElementById('addCurrentBtn');
-    if (addBtn) {
-      addBtn.addEventListener('click', async () => {
-        try {
-          const a = document.getElementById('openInTab');
-          const href = a && a.href;
-          const provider = (await getProvider())||'chatgpt';
-          if (href) {
-            // Add with suggested title captured from provider content script, but still open inline rename
-            __pendingInlineEditUrl = href;
-            __pendingInlineEditCloseOnEnter = true;
-            const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
-            await addHistory({ url: href, provider, title: suggested, needsTitle: true });
-            try {
-              const panel = document.getElementById('historyPanel');
-              if (panel) {
-                if (typeof window.showHistoryPanel === 'function') {
-                  await window.showHistoryPanel();
-                } else {
-                  panel.style.display = 'block';
-                }
-              }
-            } catch (_) {}
-          }
-        } catch (_) {}
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', async () => {
+        const modal = document.getElementById('settingsModal');
+        if (!modal) return;
+        
+        const shortcut = await getStarShortcut();
+        const keyDisplay = `${shortcut.ctrl ? 'Ctrl+' : ''}${shortcut.alt ? 'Alt+' : ''}${shortcut.shift ? 'Shift+' : ''}${shortcut.key.toUpperCase()}`;
+        
+        modal.innerHTML = `
+          <div class="settings-modal-backdrop"></div>
+          <div class="settings-modal-content">
+            <div class="settings-header">
+              <h2>Keyboard Shortcuts</h2>
+              <button class="settings-close-btn" title="Close">&times;</button>
+            </div>
+            <div class="settings-body">
+              <div class="shortcut-row">
+                <label>Star Current Page:</label>
+                <div class="shortcut-input-group">
+                  <input id="shortcutDisplay" type="text" readonly value="${keyDisplay}" class="shortcut-display">
+                  <button id="recordShortcutBtn" class="record-btn">Change</button>
+                </div>
+              </div>
+              <div class="shortcut-info">
+                Click "Change" then press your desired key combination.
+              </div>
+            </div>
+          </div>
+        `;
+        
+        modal.style.display = 'flex';
+        
+        const closeBtn = modal.querySelector('.settings-close-btn');
+        const backdrop = modal.querySelector('.settings-modal-backdrop');
+        const recordBtn = modal.querySelector('#recordShortcutBtn');
+        
+        const closeModal = () => {
+          modal.style.display = 'none';
+        };
+        
+        closeBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', closeModal);
+        
+        recordBtn.addEventListener('click', () => {
+          recordBtn.textContent = 'Listening...';
+          recordBtn.disabled = true;
+          
+          const handleKeyDown = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const newShortcut = {
+              key: e.key,
+              ctrl: e.ctrlKey,
+              shift: e.shiftKey,
+              alt: e.altKey
+            };
+            
+            // Save shortcut
+            await setStarShortcut(newShortcut);
+            __starShortcut = newShortcut;
+            
+            // Update display
+            const newKeyDisplay = `${newShortcut.ctrl ? 'Ctrl+' : ''}${newShortcut.alt ? 'Alt+' : ''}${newShortcut.shift ? 'Shift+' : ''}${newShortcut.key.toUpperCase()}`;
+            const display = modal.querySelector('#shortcutDisplay');
+            if (display) display.value = newKeyDisplay;
+            
+            recordBtn.textContent = 'Change';
+            recordBtn.disabled = false;
+            document.removeEventListener('keydown', handleKeyDown, true);
+          };
+          
+          document.addEventListener('keydown', handleKeyDown, true);
+        });
       });
     }
   } catch (_) {}
+
   try { (typeof ensureAccessFor === 'function') && ensureAccessFor(mergedCurrent.baseUrl); } catch(_) {}
 
   // Helper: cycle provider by direction (-1 prev, +1 next)
@@ -1363,12 +1513,12 @@ const initializeBar = async () => {
       if (p.authCheck) {
         const auth = await p.authCheck();
         if (auth.state === 'authorized') {
-          ensureFrame(container, nextKey, p);
+          await ensureFrame(container, nextKey, p);
         } else {
           renderMessage(container, auth.message || 'Please login.');
         }
       } else {
-        ensureFrame(container, nextKey, p);
+        await ensureFrame(container, nextKey, p);
       }
       // Reset suppression and bring focus back to the panel container
       __suppressNextFrameFocus = false;
@@ -1381,6 +1531,47 @@ const initializeBar = async () => {
     } catch (_) {}
   };
   try { window.__AIPanelCycleProvider = cycleProvider; } catch (_) {}
+
+  // Global keyboard shortcut to star current page (customizable, default: Ctrl+L)
+  let __starShortcut = null;
+  (async () => {
+    __starShortcut = await getStarShortcut();
+    dbg('Star shortcut loaded:', __starShortcut);
+  })();
+
+  document.addEventListener('keydown', async (e) => {
+    try {
+      if (!__starShortcut) return;
+      if (matchesShortcut(e, __starShortcut)) {
+        // Check if user is typing in input/textarea
+        const el = document.activeElement;
+        const tag = (el && el.tagName) ? el.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea') return; // Allow typing in inputs
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Star current page
+        const a = document.getElementById('openInTab');
+        const href = a && a.href;
+        const provider = (await getProvider())||'chatgpt';
+        if (href) {
+          const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
+          await addFavorite({ url: href, provider, title: suggested, needsTitle: false });
+          dbg('Page starred via keyboard shortcut');
+          // Show brief feedback
+          try {
+            const btn = document.getElementById('favoritesBtn');
+            if (btn) {
+              const oldText = btn.textContent;
+              btn.textContent = '✓ Starred';
+              setTimeout(() => { btn.textContent = oldText; }, 1200);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }, true);
 
   // Keyboard: Tab to cycle providers (Shift+Tab reverse)
   try {
@@ -1400,12 +1591,12 @@ const initializeBar = async () => {
   if (mergedCurrent.authCheck) {
     const auth = await mergedCurrent.authCheck();
     if (auth.state === 'authorized') {
-      ensureFrame(container, currentProviderKey, mergedCurrent);
+      await ensureFrame(container, currentProviderKey, mergedCurrent);
     } else {
       renderMessage(container, auth.message || 'Please login.');
     }
   } else {
-    ensureFrame(container, currentProviderKey, mergedCurrent);
+    await ensureFrame(container, currentProviderKey, mergedCurrent);
   }
 
   // removed keyboard command & navigation for menu
@@ -1461,6 +1652,8 @@ try {
         }
       } catch (_) {}
       currentUrlByProvider[matchedKey] = data.href;
+      // Save URL for restoration on next open
+      saveProviderUrl(matchedKey, data.href);
 
       // If this provider is currently visible, update the Open in Tab link
       const openInTab = document.getElementById('openInTab');
