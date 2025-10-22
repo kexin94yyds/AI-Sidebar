@@ -281,6 +281,32 @@ const setStarShortcut = async (shortcut) => {
   } catch (_) {}
 };
 
+// Button shortcuts management
+const defaultButtonShortcuts = {
+  openInTab: { key: 'o', ctrl: true, shift: false, alt: false },
+  copyLink: { key: 'c', ctrl: true, shift: false, alt: false },
+  historyBtn: { key: 'h', ctrl: true, shift: false, alt: false },
+  favoritesBtn: { key: 'l', ctrl: true, shift: false, alt: false }
+};
+
+const getButtonShortcuts = async () => {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage?.local.get(['buttonShortcuts'], (res) => {
+        resolve(res.buttonShortcuts || defaultButtonShortcuts);
+      });
+    } catch (_) {
+      resolve(defaultButtonShortcuts);
+    }
+  });
+};
+
+const setButtonShortcuts = async (shortcuts) => {
+  try {
+    await chrome.storage?.local.set({ buttonShortcuts: shortcuts });
+  } catch (_) {}
+};
+
 const matchesShortcut = (event, shortcut) => {
   return (
     event.key.toLowerCase() === shortcut.key.toLowerCase() &&
@@ -1188,21 +1214,12 @@ const initializeBar = async () => {
     try { openInTab.title = preferred; } catch (_) {}
     try { const b=document.getElementById('copyLink'); if (b) b.title = preferred; } catch (_) {}
 
-    // Open the current provider URL in the active (left) tab
-    // Falls back to a new tab if tab update isn’t possible
+    // Open the current provider URL in a new tab
     openInTab.addEventListener('click', async (e) => {
       try {
         e.preventDefault();
       } catch (_) {}
       const url = openInTab.href || preferred || mergedCurrent.baseUrl;
-      try {
-        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-        const activeTab = tabs && tabs[0];
-        if (activeTab && activeTab.id) {
-          await chrome.tabs.update(activeTab.id, { url });
-          return;
-        }
-      } catch (_) {}
       try { window.open(url, '_blank'); } catch (_) {}
     });
   }
@@ -1405,8 +1422,26 @@ const initializeBar = async () => {
         const modal = document.getElementById('settingsModal');
         if (!modal) return;
         
-        const shortcut = await getStarShortcut();
-        const keyDisplay = `${shortcut.ctrl ? 'Ctrl+' : ''}${shortcut.alt ? 'Alt+' : ''}${shortcut.shift ? 'Shift+' : ''}${shortcut.key.toUpperCase()}`;
+        const starShortcut = await getStarShortcut();
+        const buttonShortcuts = await getButtonShortcuts();
+        
+        const formatKey = (shortcut) => `${shortcut.ctrl ? 'Ctrl+' : ''}${shortcut.alt ? 'Alt+' : ''}${shortcut.shift ? 'Shift+' : ''}${shortcut.key.toUpperCase()}`;
+        
+        const shortcutRows = [
+          { id: 'openInTab', label: 'Open in Tab', shortcut: buttonShortcuts.openInTab },
+          { id: 'copyLink', label: 'Copy Link', shortcut: buttonShortcuts.copyLink },
+          { id: 'historyBtn', label: 'History', shortcut: buttonShortcuts.historyBtn },
+          { id: 'favoritesBtn', label: 'Starred', shortcut: buttonShortcuts.favoritesBtn },
+          { id: 'star', label: 'Star Current Page', shortcut: starShortcut }
+        ].map(item => `
+          <div class="shortcut-row">
+            <label>${item.label}:</label>
+            <div class="shortcut-input-group">
+              <input id="shortcutDisplay-${item.id}" type="text" readonly value="${formatKey(item.shortcut)}" class="shortcut-display">
+              <button id="recordShortcutBtn-${item.id}" class="record-btn" data-shortcut-id="${item.id}">Change</button>
+            </div>
+          </div>
+        `).join('');
         
         modal.innerHTML = `
           <div class="settings-modal-backdrop"></div>
@@ -1416,13 +1451,7 @@ const initializeBar = async () => {
               <button class="settings-close-btn" title="Close">&times;</button>
             </div>
             <div class="settings-body">
-              <div class="shortcut-row">
-                <label>Star Current Page:</label>
-                <div class="shortcut-input-group">
-                  <input id="shortcutDisplay" type="text" readonly value="${keyDisplay}" class="shortcut-display">
-                  <button id="recordShortcutBtn" class="record-btn">Change</button>
-                </div>
-              </div>
+              ${shortcutRows}
               <div class="shortcut-info">
                 Click "Change" then press your desired key combination.
               </div>
@@ -1434,7 +1463,6 @@ const initializeBar = async () => {
         
         const closeBtn = modal.querySelector('.settings-close-btn');
         const backdrop = modal.querySelector('.settings-modal-backdrop');
-        const recordBtn = modal.querySelector('#recordShortcutBtn');
         
         const closeModal = () => {
           modal.style.display = 'none';
@@ -1443,36 +1471,45 @@ const initializeBar = async () => {
         closeBtn.addEventListener('click', closeModal);
         backdrop.addEventListener('click', closeModal);
         
-        recordBtn.addEventListener('click', () => {
-          recordBtn.textContent = 'Listening...';
-          recordBtn.disabled = true;
-          
-          const handleKeyDown = async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        // Attach event listeners to all record buttons
+        modal.querySelectorAll('.record-btn').forEach(recordBtn => {
+          recordBtn.addEventListener('click', async () => {
+            const shortcutId = recordBtn.getAttribute('data-shortcut-id');
+            recordBtn.textContent = 'Listening...';
+            recordBtn.disabled = true;
             
-            const newShortcut = {
-              key: e.key,
-              ctrl: e.ctrlKey,
-              shift: e.shiftKey,
-              alt: e.altKey
+            const handleKeyDown = async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              
+              const newShortcut = {
+                key: e.key,
+                ctrl: e.ctrlKey,
+                shift: e.shiftKey,
+                alt: e.altKey
+              };
+              
+              const newKeyDisplay = `${newShortcut.ctrl ? 'Ctrl+' : ''}${newShortcut.alt ? 'Alt+' : ''}${newShortcut.shift ? 'Shift+' : ''}${newShortcut.key.toUpperCase()}`;
+              const display = modal.querySelector(`#shortcutDisplay-${shortcutId}`);
+              if (display) display.value = newKeyDisplay;
+              
+              // Save shortcut based on type
+              if (shortcutId === 'star') {
+                await setStarShortcut(newShortcut);
+                __starShortcut = newShortcut;
+              } else {
+                const updated = await getButtonShortcuts();
+                updated[shortcutId] = newShortcut;
+                await setButtonShortcuts(updated);
+              }
+              
+              recordBtn.textContent = 'Change';
+              recordBtn.disabled = false;
+              document.removeEventListener('keydown', handleKeyDown, true);
             };
             
-            // Save shortcut
-            await setStarShortcut(newShortcut);
-            __starShortcut = newShortcut;
-            
-            // Update display
-            const newKeyDisplay = `${newShortcut.ctrl ? 'Ctrl+' : ''}${newShortcut.alt ? 'Alt+' : ''}${newShortcut.shift ? 'Shift+' : ''}${newShortcut.key.toUpperCase()}`;
-            const display = modal.querySelector('#shortcutDisplay');
-            if (display) display.value = newKeyDisplay;
-            
-            recordBtn.textContent = 'Change';
-            recordBtn.disabled = false;
-            document.removeEventListener('keydown', handleKeyDown, true);
-          };
-          
-          document.addEventListener('keydown', handleKeyDown, true);
+            document.addEventListener('keydown', handleKeyDown, true);
+          });
         });
       });
     }
@@ -1585,6 +1622,65 @@ const initializeBar = async () => {
         await cycleProvider(dir);
       } catch (_) {}
     }, true);
+  } catch (_) {}
+
+  // Global keyboard shortcuts for toolbar buttons
+  let __buttonShortcuts = await getButtonShortcuts();
+  document.addEventListener('keydown', async (e) => {
+    try {
+      const el = document.activeElement;
+      const tag = (el && el.tagName) ? el.tagName.toLowerCase() : '';
+      // Don't trigger shortcuts when typing in inputs
+      if (tag === 'input' || tag === 'textarea') return;
+      
+      const isShortcutMatch = (shortcut) => {
+        return e.key.toLowerCase() === shortcut.key.toLowerCase() &&
+               e.ctrlKey === shortcut.ctrl &&
+               e.shiftKey === shortcut.shift &&
+               e.altKey === shortcut.alt;
+      };
+      
+      // Check Open in Tab
+      if (isShortcutMatch(__buttonShortcuts.openInTab)) {
+        e.preventDefault();
+        const btn = document.getElementById('openInTab');
+        if (btn) btn.click();
+        return;
+      }
+      
+      // Check Copy Link
+      if (isShortcutMatch(__buttonShortcuts.copyLink)) {
+        e.preventDefault();
+        const btn = document.getElementById('copyLink');
+        if (btn) btn.click();
+        return;
+      }
+      
+      // Check History
+      if (isShortcutMatch(__buttonShortcuts.historyBtn)) {
+        e.preventDefault();
+        const btn = document.getElementById('historyBtn');
+        if (btn) btn.click();
+        return;
+      }
+      
+      // Check Starred
+      if (isShortcutMatch(__buttonShortcuts.favoritesBtn)) {
+        e.preventDefault();
+        const btn = document.getElementById('favoritesBtn');
+        if (btn) btn.click();
+        return;
+      }
+    } catch (_) {}
+  }, true);
+
+  // Listen for shortcut updates in settings
+  try {
+    window.addEventListener('storage', async (e) => {
+      if (e.key === 'buttonShortcuts') {
+        __buttonShortcuts = await getButtonShortcuts();
+      }
+    });
   } catch (_) {}
 
   // Initial render
