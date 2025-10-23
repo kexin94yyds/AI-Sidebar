@@ -498,7 +498,7 @@ async function renderHistoryPanel() {
         <span class="hp-title" data-url="${escapeAttr(it.url)}" title="${escTitle}">${escTitle}</span>
         <span class="hp-time">${ds}</span>
         <span class="hp-actions">
-          <a href="${escapeAttr(it.url)}" target="_blank" rel="noreferrer">Open</a>
+          <button class="hp-open" data-url="${escapeAttr(it.url)}" data-provider="${it.provider||''}">Open</button>
           <button class="hp-copy" data-url="${escapeAttr(it.url)}">Copy</button>
           <button class="hp-rename" data-url="${escapeAttr(it.url)}">Rename</button>
           <button class="${starClass}" data-url="${escapeAttr(it.url)}" title="${starTitle}">★</button>
@@ -522,6 +522,68 @@ async function renderHistoryPanel() {
           renderHistoryPanel();
         }
       } catch (_) {}
+    });
+    panel.querySelectorAll('.hp-open')?.forEach((btn)=>{
+      btn.addEventListener('click', async (e)=>{
+        try {
+          const raw = e.currentTarget.getAttribute('data-url');
+          const url = normalizeUrlAttr(raw);
+          const providerKey = e.currentTarget.getAttribute('data-provider');
+          if (!url) return;
+          
+          // Load the URL in the sidebar
+          const container = document.getElementById('iframe');
+          const overrides = await getOverrides();
+          const customProviders = await loadCustomProviders();
+          const ALL = { ...PROVIDERS };
+          (customProviders || []).forEach((c) => { ALL[c.key] = c; });
+          
+          // Switch to the provider if specified, otherwise stay on current
+          if (providerKey && ALL[providerKey]) {
+            await setProvider(providerKey);
+            const p = effectiveConfig(ALL, providerKey, overrides);
+            
+            // Update the Open in Tab button
+            const openInTab = document.getElementById('openInTab');
+            if (openInTab) {
+              openInTab.href = url;
+              try { openInTab.title = url; } catch (_) {}
+            }
+            
+            // Load the frame
+            if (p.authCheck) {
+              const auth = await p.authCheck();
+              if (auth.state === 'authorized') {
+                await ensureFrame(container, providerKey, p);
+              } else {
+                renderMessage(container, auth.message || 'Please login.');
+              }
+            } else {
+              await ensureFrame(container, providerKey, p);
+            }
+            
+            // Navigate the frame to the URL
+            const frame = cachedFrames[providerKey];
+            if (frame && frame.contentWindow) {
+              try {
+                frame.contentWindow.location.href = url;
+              } catch (err) {
+                // Fallback: reload frame with new URL
+                frame.src = url;
+              }
+            }
+            
+            // Update UI
+            renderProviderTabs(providerKey);
+          }
+          
+          // Close the history panel
+          panel.style.display = 'none';
+          try { document.getElementById('historyBackdrop')?.remove(); } catch (_) {}
+        } catch (err) {
+          console.error('Error opening history item in sidebar:', err);
+        }
+      });
     });
     panel.querySelectorAll('.hp-copy')?.forEach((btn)=>{
       btn.addEventListener('click', async (e)=>{
