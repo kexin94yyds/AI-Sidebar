@@ -721,7 +721,7 @@ async function renderFavoritesPanel() {
         <span class="fp-title" data-url="${it.url}" title="${escTitle}">${escTitle}</span>
         <span class="fp-time">${ds}</span>
         <span class="fp-actions-row">
-          <a href="${it.url}" target="_blank" rel="noreferrer">Open</a>
+          <button class="fp-open" data-url="${it.url}" data-provider="${it.provider||''}">Open</button>
           <button class="fp-copy" data-url="${it.url}">Copy</button>
           <button class="fp-rename" data-url="${it.url}">Rename</button>
           <button class="fp-remove" data-url="${it.url}">Remove</button>
@@ -746,6 +746,67 @@ async function renderFavoritesPanel() {
           renderFavoritesPanel();
         }
       } catch (_) {}
+    });
+    panel.querySelectorAll('.fp-open')?.forEach((btn)=>{
+      btn.addEventListener('click', async (e)=>{
+        try {
+          const url = e.currentTarget.getAttribute('data-url');
+          const providerKey = e.currentTarget.getAttribute('data-provider');
+          if (!url) return;
+          
+          // Load the URL in the sidebar
+          const container = document.getElementById('iframe');
+          const overrides = await getOverrides();
+          const customProviders = await loadCustomProviders();
+          const ALL = { ...PROVIDERS };
+          (customProviders || []).forEach((c) => { ALL[c.key] = c; });
+          
+          // Switch to the provider if specified, otherwise stay on current
+          if (providerKey && ALL[providerKey]) {
+            await setProvider(providerKey);
+            const p = effectiveConfig(ALL, providerKey, overrides);
+            
+            // Update the Open in Tab button
+            const openInTab = document.getElementById('openInTab');
+            if (openInTab) {
+              openInTab.href = url;
+              try { openInTab.title = url; } catch (_) {}
+            }
+            
+            // Load the frame
+            if (p.authCheck) {
+              const auth = await p.authCheck();
+              if (auth.state === 'authorized') {
+                await ensureFrame(container, providerKey, p);
+              } else {
+                renderMessage(container, auth.message || 'Please login.');
+              }
+            } else {
+              await ensureFrame(container, providerKey, p);
+            }
+            
+            // Navigate the frame to the URL
+            const frame = cachedFrames[providerKey];
+            if (frame && frame.contentWindow) {
+              try {
+                frame.contentWindow.location.href = url;
+              } catch (err) {
+                // Fallback: reload frame with new URL
+                frame.src = url;
+              }
+            }
+            
+            // Update UI
+            renderProviderTabs(providerKey);
+          }
+          
+          // Close the favorites panel
+          panel.style.display = 'none';
+          try { document.getElementById('favoritesBackdrop')?.remove(); } catch (_) {}
+        } catch (err) {
+          console.error('Error opening favorite in sidebar:', err);
+        }
+      });
     });
     panel.querySelectorAll('.fp-copy')?.forEach((btn)=>{
       btn.addEventListener('click', async (e)=>{
