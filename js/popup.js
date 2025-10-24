@@ -546,7 +546,7 @@ async function renderHistoryPanel() {
             // Update the Open in Tab button
             const openInTab = document.getElementById('openInTab');
             if (openInTab) {
-              openInTab.href = url;
+              openInTab.dataset.url = url;
               try { openInTab.title = url; } catch (_) {}
             }
             
@@ -750,7 +750,7 @@ async function updateStarButtonState() {
     const openInTab = document.getElementById('openInTab');
     if (!starBtn || !openInTab) return;
     
-    const currentUrl = openInTab.href;
+    const currentUrl = openInTab.dataset.url;
     if (!currentUrl || currentUrl === '#') {
       starBtn.textContent = '☆'; // Empty star
       starBtn.classList.remove('starred');
@@ -863,7 +863,7 @@ async function renderFavoritesPanel() {
             // Update the Open in Tab button
             const openInTab = document.getElementById('openInTab');
             if (openInTab) {
-              openInTab.href = url;
+              openInTab.dataset.url = url;
               try { openInTab.title = url; } catch (_) {}
             }
             
@@ -1093,7 +1093,7 @@ const ensureFrame = async (container, key, provider) => {
     try {
       const openInTab = document.getElementById('openInTab');
       if (openInTab && typeof view.src === 'string') {
-        openInTab.href = view.src;
+        openInTab.dataset.url = view.src;
       }
     } catch (_) {}
     // Record expected origin for this provider (for message validation)
@@ -1262,7 +1262,7 @@ const renderProviderTabs = async (currentProviderKey) => {
       const p = effectiveConfig(ALL, key, overrides);
       if (openInTab) {
         const preferred = (currentUrlByProvider && currentUrlByProvider[key]) || p.baseUrl;
-        openInTab.href = preferred;
+        openInTab.dataset.url = preferred;
         try { openInTab.title = preferred; } catch (_) {}
       }
       // ensure DNR + host permissions for selected origin
@@ -1367,7 +1367,7 @@ const initializeBar = async () => {
 
   if (openInTab) {
     const preferred = currentUrlByProvider[currentProviderKey] || mergedCurrent.baseUrl;
-    openInTab.href = preferred;
+    openInTab.dataset.url = preferred;
     try { openInTab.title = preferred; } catch (_) {}
     try { const b=document.getElementById('copyLink'); if (b) b.title = preferred; } catch (_) {}
     // 初始化星号按钮状态
@@ -1378,7 +1378,7 @@ const initializeBar = async () => {
       try {
         e.preventDefault();
       } catch (_) {}
-      const url = openInTab.href || preferred || mergedCurrent.baseUrl;
+      const url = openInTab.dataset.url || preferred || mergedCurrent.baseUrl;
       try { window.open(url, '_blank'); } catch (_) {}
     });
   }
@@ -1388,7 +1388,7 @@ const initializeBar = async () => {
     const copyBtn = document.getElementById('copyLink');
     if (copyBtn) {
       const computeUrl = () => {
-        try { const a = document.getElementById('openInTab'); if (a && a.href) return a.href; } catch (_) {}
+        try { const a = document.getElementById('openInTab'); if (a && a.dataset.url) return a.dataset.url; } catch (_) {}
         return mergedCurrent.baseUrl;
       };
       copyBtn.addEventListener('click', async () => {
@@ -1564,7 +1564,7 @@ const initializeBar = async () => {
       starBtn.addEventListener('click', async () => {
         try {
           const openInTab = document.getElementById('openInTab');
-          const href = openInTab && openInTab.href;
+          const href = openInTab && openInTab.dataset.url;
           const provider = (await getProvider()) || 'chatgpt';
           
           if (!href || href === '#') return;
@@ -1718,7 +1718,7 @@ const initializeBar = async () => {
       await setProvider(nextKey);
       if (openInTab) {
         const preferred = (currentUrlByProvider && currentUrlByProvider[nextKey]) || p.baseUrl;
-        openInTab.href = preferred;
+        openInTab.dataset.url = preferred;
         try { openInTab.title = preferred; } catch (_) {}
       }
       try {
@@ -1923,7 +1923,7 @@ try {
       const openInTab = document.getElementById('openInTab');
       const visible = (cachedFrames[matchedKey] && cachedFrames[matchedKey].style.display !== 'none');
       if (openInTab && visible) {
-        openInTab.href = data.href;
+        openInTab.dataset.url = data.href;
         try { openInTab.title = data.href; } catch (_) {}
         try { const b=document.getElementById('copyLink'); if (b) b.title = data.href; } catch (_) {}
         // 更新星号按钮状态

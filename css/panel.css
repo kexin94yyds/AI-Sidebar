@@ -51,12 +51,13 @@ html {
 
 .toolbar {
   position: absolute;
-  top: 8px; /* 调整工具栏位置 */
+  top: 8px;
   left: 8px;
   right: 8px;
   height: 40px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   flex-wrap: nowrap;
   padding: 0 12px;
@@ -248,48 +249,15 @@ html {
 .dd-item:hover .del { visibility: visible; }
 .dd-item .del:hover { color: #ef4444; }
 
-.toolbar a {
-  margin-left: auto;
-  color: #1f2937;
-  text-decoration: none;
-  font-size: 12px;
-  font-weight: 600;
-  /* Prevent label wrapping and allow truncation */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
-  min-width: 0;
-}
-.toolbar a:hover { text-decoration: underline; }
-
-/* make Open in Tab look like a pill button */
-.toolbar a#openInTab {
-  margin-left: 8px;
+/* Unified button style for all toolbar buttons */
+.toolbar button {
+  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 30px;
   padding: 0 14px;
   border-radius: 9999px;
-  background: #ffffff; /* 白色风格 */
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
-  color: #111827;
-  user-select: none;
-}
-.toolbar a#openInTab:hover { background: #f8fafc; border-color: #dbe1e8; text-decoration: none; }
-.toolbar a#openInTab:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
-
-/* Copy Link button styled similar to Open in Tab */
-.toolbar button#copyLink {
-  margin-left: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 9999px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
   box-shadow: 0 3px 14px rgba(15,23,42,0.06);
@@ -300,116 +268,30 @@ html {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
-  min-width: 0;
-}
-.toolbar button#copyLink:hover { background: #f8fafc; border-color: #dbe1e8; }
-.toolbar button#copyLink:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
-
-/* History button */
-.toolbar button#historyBtn {
-  margin-left: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 9999px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
-  color: #111827;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
-  min-width: 0;
-}
-.toolbar button#historyBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
-.toolbar button#historyBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
-
-/* Add Current button */
-.toolbar button#addCurrentBtn {
-  margin-left: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 9999px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
-  color: #111827;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
-  min-width: 0;
-}
-.toolbar button#addCurrentBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
-.toolbar button#addCurrentBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
-
-/* Star/Favorites button */
-.toolbar button#favoritesBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 9999px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
-  color: #111827;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  gap: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
-  min-width: 0;
-  transition: color 0.2s ease;
-}
-.toolbar button#favoritesBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
-.toolbar button#favoritesBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
-
-/* Star button - icon only, larger for easy clicking */
-.toolbar button#starBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 30px;
-  padding: 0;
-  border-radius: 9999px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
-  color: #111827;
-  font-size: 18px;
-  cursor: pointer;
   transition: all 0.2s ease;
 }
-.toolbar button#starBtn:hover { 
-  background: #f8fafc; 
+.toolbar button:hover {
+  background: #f8fafc;
   border-color: #dbe1e8;
+}
+.toolbar button:active {
+  background: #f1f5f9;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.05);
+}
+
+/* Star button - icon only, fixed width */
+.toolbar button#starBtn {
+  flex: 0 0 auto;
+  width: 40px;
+  padding: 0;
+  font-size: 18px;
+}
+.toolbar button#starBtn:hover {
   transform: scale(1.05);
 }
-.toolbar button#starBtn:active { 
-  background: #f1f5f9; 
-  box-shadow: 0 2px 8px rgba(15,23,42,0.05);
+.toolbar button#starBtn:active {
   transform: scale(0.98);
 }
-/* Starred state */
 .toolbar button#starBtn.starred {
   color: #000000;
 }
