@@ -381,13 +381,37 @@ html {
 }
 .toolbar button#favoritesBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
 .toolbar button#favoritesBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
-/* Starred state: filled star with golden color */
-.toolbar button#favoritesBtn.starred {
-  color: #fbbf24; /* Golden color for filled star */
+
+/* Star button - icon only, larger for easy clicking */
+.toolbar button#starBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 30px;
+  padding: 0;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 3px 14px rgba(15,23,42,0.06);
+  color: #111827;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
-/* Empty star state (default) */
-.toolbar button#favoritesBtn.empty {
-  color: #9ca3af; /* Gray color for empty star */
+.toolbar button#starBtn:hover { 
+  background: #f8fafc; 
+  border-color: #dbe1e8;
+  transform: scale(1.05);
+}
+.toolbar button#starBtn:active { 
+  background: #f1f5f9; 
+  box-shadow: 0 2px 8px rgba(15,23,42,0.05);
+  transform: scale(0.98);
+}
+/* Starred state */
+.toolbar button#starBtn.starred {
+  color: #000000;
 }
 
 /* History dropdown panel */
