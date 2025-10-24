@@ -480,7 +480,7 @@ async function renderHistoryPanel() {
     if (!panel) return;
     const list = await loadHistory();
     const favList = await loadFavorites();
-    const favSet = new Set((favList||[]).map(x=> x.url));
+    const favSet = new Set((favList||[]).map(x=> normalizeUrlForMatch(x.url)));
     const rows = (list || []).map((it)=>{
       const date = new Date(it.time||Date.now());
       const ds = date.toLocaleString();
@@ -490,7 +490,7 @@ async function renderHistoryPanel() {
         ? it.title
         : (deriveTitle(it.provider, it.url, '') || ''));
       const escTitle = titleToShow.replace(/[<>]/g,'');
-      const isStarred = favSet.has(it.url);
+      const isStarred = favSet.has(normalizeUrlForMatch(it.url));
       const starClass = isStarred ? 'hp-star active' : 'hp-star';
       const starTitle = isStarred ? 'Unstar' : 'Star';
       return `<div class="hp-item" data-url="${escapeAttr(it.url)}">
@@ -604,10 +604,11 @@ async function renderHistoryPanel() {
         const url = e.currentTarget.getAttribute('data-url');
         const isActive = e.currentTarget.classList.contains('active');
         const provider = (await getProvider())||'chatgpt';
+        const normalizedUrl = normalizeUrlForMatch(url);
         if (isActive) {
           // Unstar
           const favs = await loadFavorites();
-          await saveFavorites(favs.filter((x)=> x.url !== url));
+          await saveFavorites(favs.filter((x)=> normalizeUrlForMatch(x.url) !== normalizedUrl));
         } else {
           // Star - no inline edit, just add to favorites silently
           const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
@@ -619,7 +620,7 @@ async function renderHistoryPanel() {
         try {
           const openInTab = document.getElementById('openInTab');
           const currentUrl = openInTab && openInTab.dataset.url;
-          if (currentUrl === url) {
+          if (currentUrl && normalizeUrlForMatch(currentUrl) === normalizedUrl) {
             await updateStarButtonState();
           }
         } catch (_) {}
@@ -760,8 +761,11 @@ async function updateStarButtonState() {
       return;
     }
     
+    // Normalize current URL for comparison
+    const normalizedCurrent = normalizeUrlForMatch(currentUrl);
+    
     const favList = await loadFavorites();
-    const isStarred = (favList || []).some(fav => fav.url === currentUrl);
+    const isStarred = (favList || []).some(fav => normalizeUrlForMatch(fav.url) === normalizedCurrent);
     
     if (isStarred) {
       starBtn.textContent = '★'; // Filled star (black)
@@ -1574,13 +1578,14 @@ const initializeBar = async () => {
           
           if (!href || href === '#') return;
           
-          // Check if already starred
+          // Check if already starred (normalize for comparison)
+          const normalizedHref = normalizeUrlForMatch(href);
           const favList = await loadFavorites();
-          const isStarred = (favList || []).some(fav => fav.url === href);
+          const isStarred = (favList || []).some(fav => normalizeUrlForMatch(fav.url) === normalizedHref);
           
           if (isStarred) {
-            // Unstar: remove from favorites
-            const filtered = favList.filter(fav => fav.url !== href);
+            // Unstar: remove from favorites (use normalized comparison)
+            const filtered = favList.filter(fav => normalizeUrlForMatch(fav.url) !== normalizedHref);
             await saveFavorites(filtered);
           } else {
             // Star: add to favorites

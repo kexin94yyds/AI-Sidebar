@@ -491,6 +491,7 @@
       }
     } catch (_) {}
 
+
     // Initial emit
     send(true, 'init');
 
