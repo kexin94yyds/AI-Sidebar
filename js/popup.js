@@ -575,6 +575,8 @@ async function renderHistoryPanel() {
             
             // Update UI
             renderProviderTabs(providerKey);
+            // Update Star button state for the newly opened URL
+            await updateStarButtonState();
           }
           
           // Close the history panel
@@ -893,6 +895,8 @@ async function renderFavoritesPanel() {
             
             // Update UI
             renderProviderTabs(providerKey);
+            // Update Star button state for the newly opened URL
+            await updateStarButtonState();
           }
           
           // Close the favorites panel
