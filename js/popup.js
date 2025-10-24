@@ -1521,9 +1521,8 @@ const initializeBar = async () => {
             try {
               const btn = document.getElementById('favoritesBtn');
               if (btn) {
-                const oldText = btn.textContent;
                 btn.textContent = '✓ Starred';
-                setTimeout(() => { btn.textContent = oldText; }, 1200);
+                setTimeout(() => { btn.textContent = '★ Starred'; }, 1200);
               }
             } catch (_) {}
           }
@@ -1723,9 +1722,8 @@ const initializeBar = async () => {
           try {
             const btn = document.getElementById('favoritesBtn');
             if (btn) {
-              const oldText = btn.textContent;
               btn.textContent = '✓ Starred';
-              setTimeout(() => { btn.textContent = oldText; }, 1200);
+              setTimeout(() => { btn.textContent = '★ Starred'; }, 1200);
             }
           } catch (_) {}
         }
