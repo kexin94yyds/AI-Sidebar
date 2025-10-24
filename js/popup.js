@@ -742,6 +742,36 @@ const FAVORITES_KEY = 'aiFavoriteLinks';
 let __pendingFavInlineEditUrl = null;
 let __pendingFavCloseOnEnter = false;
 let __favSearchQuery = '';
+
+// Update starred button state based on current URL
+async function updateStarredButtonState() {
+  try {
+    const btn = document.getElementById('favoritesBtn');
+    const openInTab = document.getElementById('openInTab');
+    if (!btn || !openInTab) return;
+    
+    const currentUrl = openInTab.href;
+    if (!currentUrl || currentUrl === '#') {
+      btn.textContent = '☆ Starred'; // Empty star
+      btn.classList.remove('starred');
+      btn.classList.add('empty');
+      return;
+    }
+    
+    const favList = await loadFavorites();
+    const isStarred = (favList || []).some(fav => fav.url === currentUrl);
+    
+    if (isStarred) {
+      btn.textContent = '★ Starred'; // Filled star
+      btn.classList.add('starred');
+      btn.classList.remove('empty');
+    } else {
+      btn.textContent = '☆ Starred'; // Empty star
+      btn.classList.remove('starred');
+      btn.classList.add('empty');
+    }
+  } catch (_) {}
+}
 async function loadFavorites() {
   try {
     const res = await new Promise((r)=> chrome.storage?.local.get([FAVORITES_KEY], (v)=> r(v||{})));
@@ -1249,6 +1279,8 @@ const renderProviderTabs = async (currentProviderKey) => {
 
       // 更新活动状态
       renderProviderTabs(key);
+      // 更新星号按钮状态
+      await updateStarredButtonState();
     });
 
     tabsContainer.appendChild(button);
@@ -1336,6 +1368,8 @@ const initializeBar = async () => {
     openInTab.href = preferred;
     try { openInTab.title = preferred; } catch (_) {}
     try { const b=document.getElementById('copyLink'); if (b) b.title = preferred; } catch (_) {}
+    // 初始化星号按钮状态
+    await updateStarredButtonState();
 
     // Open the current provider URL in a new tab
     openInTab.addEventListener('click', async (e) => {
@@ -1522,7 +1556,9 @@ const initializeBar = async () => {
               const btn = document.getElementById('favoritesBtn');
               if (btn) {
                 btn.textContent = '✓ Starred';
-                setTimeout(() => { btn.textContent = '★ Starred'; }, 1200);
+                setTimeout(async () => { 
+                  await updateStarredButtonState();
+                }, 1200);
               }
             } catch (_) {}
           }
@@ -1723,7 +1759,9 @@ const initializeBar = async () => {
             const btn = document.getElementById('favoritesBtn');
             if (btn) {
               btn.textContent = '✓ Starred';
-              setTimeout(() => { btn.textContent = '★ Starred'; }, 1200);
+              setTimeout(async () => { 
+                await updateStarredButtonState();
+              }, 1200);
             }
           } catch (_) {}
         }
@@ -1879,6 +1917,8 @@ try {
         openInTab.href = data.href;
         try { openInTab.title = data.href; } catch (_) {}
         try { const b=document.getElementById('copyLink'); if (b) b.title = data.href; } catch (_) {}
+        // 更新星号按钮状态
+        await updateStarredButtonState();
       }
 
       // Auto-save history for supported providers when a deep link is detected

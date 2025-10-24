@@ -377,9 +377,18 @@ html {
   text-overflow: ellipsis;
   max-width: 160px;
   min-width: 0;
+  transition: color 0.2s ease;
 }
 .toolbar button#favoritesBtn:hover { background: #f8fafc; border-color: #dbe1e8; }
 .toolbar button#favoritesBtn:active { background: #f1f5f9; box-shadow: 0 2px 8px rgba(15,23,42,0.05); }
+/* Starred state: filled star with golden color */
+.toolbar button#favoritesBtn.starred {
+  color: #fbbf24; /* Golden color for filled star */
+}
+/* Empty star state (default) */
+.toolbar button#favoritesBtn.empty {
+  color: #9ca3af; /* Gray color for empty star */
+}
 
 /* History dropdown panel */
 .history-panel {
@@ -698,6 +707,7 @@ html {
   box-shadow: 0 0 0 2px #4285f4;
   opacity: 1;
 }
+
 
 #provider-tabs button .provider-icon,
 #provider-tabs button img {
