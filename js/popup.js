@@ -1870,7 +1870,7 @@ try {
 } catch (_) {}
 
   // Listen for URL updates from content scripts inside provider iframes
-  window.addEventListener('message', (event) => {
+  window.addEventListener('message', async (event) => {
     try {
       const data = event.data || {};
       if (!data || !data.type) return;
