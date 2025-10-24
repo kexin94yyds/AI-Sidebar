@@ -611,7 +611,16 @@ async function renderHistoryPanel() {
           const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
           await addFavorite({ url, provider, title: suggested, needsTitle: false });
         }
+        // Update history panel to show new star state
         renderHistoryPanel();
+        // Update the Star button in toolbar if this URL is currently displayed
+        try {
+          const openInTab = document.getElementById('openInTab');
+          const currentUrl = openInTab && openInTab.dataset.url;
+          if (currentUrl === url) {
+            await updateStarButtonState();
+          }
+        } catch (_) {}
       });
     });
     const beginInlineEdit = (titleEl, options) => {
@@ -1577,6 +1586,14 @@ const initializeBar = async () => {
           
           // Update star button state
           await updateStarButtonState();
+          
+          // If History panel is open, update it to show new star state
+          try {
+            const historyPanel = document.getElementById('historyPanel');
+            if (historyPanel && historyPanel.style.display !== 'none') {
+              await renderHistoryPanel();
+            }
+          } catch (_) {}
         } catch (err) {
           console.error('Error toggling star:', err);
         }
