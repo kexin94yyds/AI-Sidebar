@@ -595,31 +595,23 @@ async function renderHistoryPanel() {
       });
     });
     // Remove action removed by request; Clear-all remains available
-    // Star/unstar from history list
+    // Star/unstar from history list - only toggle star, don't open Favorites panel
     panel.querySelectorAll('.hp-star')?.forEach((btn)=>{
       btn.addEventListener('click', async (e)=>{
+        e.stopPropagation(); // Prevent event bubbling
         const url = e.currentTarget.getAttribute('data-url');
         const isActive = e.currentTarget.classList.contains('active');
         const provider = (await getProvider())||'chatgpt';
         if (isActive) {
+          // Unstar
           const favs = await loadFavorites();
           await saveFavorites(favs.filter((x)=> x.url !== url));
-          renderHistoryPanel();
         } else {
-          __pendingFavInlineEditUrl = url;
-          __pendingFavCloseOnEnter = true;
+          // Star - no inline edit, just add to favorites silently
           const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
-          await addFavorite({ url, provider, title: suggested, needsTitle: true });
-          try {
-            if (typeof window.showFavoritesPanel === 'function') {
-              await window.showFavoritesPanel();
-            } else {
-              const p = document.getElementById('favoritesPanel');
-              if (p) p.style.display = 'block';
-            }
-          } catch (_) {}
-          renderHistoryPanel();
+          await addFavorite({ url, provider, title: suggested, needsTitle: false });
         }
+        renderHistoryPanel();
       });
     });
     const beginInlineEdit = (titleEl, options) => {
