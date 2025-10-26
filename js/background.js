@@ -1,331 +1,61 @@
-// Ensure base DNR rules are applied (install/remove as needed)
+// 优化的DNR规则配置 - 减少冗余
+const DNR_CONFIG = {
+  // 通用的响应头移除配置
+  commonHeaders: [
+    { "header": "content-security-policy", "operation": "remove" },
+    { "header": "content-security-policy-report-only", "operation": "remove" },
+    { "header": "x-frame-options", "operation": "remove" },
+    { "header": "cross-origin-opener-policy", "operation": "remove" },
+    { "header": "cross-origin-embedder-policy", "operation": "remove" },
+    { "header": "cross-origin-resource-policy", "operation": "remove" },
+    { "header": "permissions-policy", "operation": "remove" }
+  ],
+  
+  // 需要DNR规则的域名列表
+  domains: [
+    "https://chatgpt.com/*",
+    "https://*.perplexity.ai/*", 
+    "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
+    "https://*.genspark.ai/*",
+    "https://*.tongyi.com/*",
+    "https://*.doubao.com/*",
+    "https://gemini.google.com/*",
+    "https://accounts.google.com/*",
+    "https://aistudio.google.com/*",
+    "https://claude.ai/*",
+    "https://notebooklm.google.com/*",
+    "https://chat.deepseek.com/*",
+    "https://ima.qq.com/*",
+    "https://*.ptlogin2.qq.com/*",
+    "https://www.google.com/*"
+  ]
+};
+
+// 生成DNR规则的工厂函数
+function createDnrRules() {
+  return DNR_CONFIG.domains.map((domain, index) => ({
+    id: index + 1,
+    priority: 1,
+    action: {
+      type: "modifyHeaders",
+      responseHeaders: DNR_CONFIG.commonHeaders
+    },
+    condition: {
+      urlFilter: domain,
+      resourceTypes: ["main_frame", "sub_frame"]
+    }
+  }));
+}
+
+// 应用DNR规则
 function applyBaseDnrRules() {
+  const rules = createDnrRules();
+  const ruleIds = rules.map(rule => rule.id);
+  
   chrome.declarativeNetRequest.updateDynamicRules({
-      addRules: [
-      {
-        "id": 1,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://chatgpt.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 11,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://*.perplexity.ai/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 12,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://*.genspark.ai/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 15,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://*.tongyi.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 14,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://*.doubao.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 2,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://www.perplexity.ai/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 3,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://perplexity.ai/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 4,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://gemini.google.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 5,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://accounts.google.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      }
-      ,
-      {
-        "id": 17,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://aistudio.google.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 6,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://claude.ai/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 7,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://notebooklm.google.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 16,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://chat.deepseek.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 8,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://ima.qq.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      },
-      {
-        "id": 9,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://*.ptlogin2.qq.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      }
-      ,
-      {
-        "id": 13,
-        "priority": 1,
-        "action": {
-          "type": "modifyHeaders",
-          "responseHeaders": [
-            { "header": "content-security-policy", "operation": "remove" },
-            { "header": "content-security-policy-report-only", "operation": "remove" },
-            { "header": "x-frame-options", "operation": "remove" },
-            { "header": "cross-origin-opener-policy", "operation": "remove" },
-            { "header": "cross-origin-embedder-policy", "operation": "remove" },
-            { "header": "cross-origin-resource-policy", "operation": "remove" },
-            { "header": "permissions-policy", "operation": "remove" }
-          ]
-        },
-        "condition": {
-          "urlFilter": "https://www.google.com/*",
-          "resourceTypes": ["main_frame", "sub_frame"]
-        }
-      }
-    ],
-    removeRuleIds: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]
+    addRules: rules,
+    removeRuleIds: ruleIds
   });
 }
 

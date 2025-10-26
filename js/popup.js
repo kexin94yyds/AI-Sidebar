@@ -1,55 +1,44 @@
+// 公共认证检查函数 - 减少重复代码
+const AuthCheckers = {
+  // ChatGPT通用认证检查
+  chatgptAuth: async (baseUrl = 'https://chatgpt.com') => {
+    try {
+      const res = await fetch(`${baseUrl}/api/auth/session`);
+      if (res.status === 403) {
+        return {
+          state: 'cloudflare',
+          message: `Please login and pass Cloudflare at <a href="${baseUrl}" target="_blank" rel="noreferrer">${baseUrl}</a>`
+        };
+      }
+      const data = await res.json();
+      if (!res.ok || !data.accessToken) {
+        return {
+          state: 'unauthorized',
+          message: `Please login at <a href="${baseUrl}" target="_blank" rel="noreferrer">${baseUrl}</a> first`
+        };
+      }
+      return { state: 'authorized' };
+    } catch (e) {
+      console.error('ChatGPT session check failed:', e);
+      return { state: 'error', message: 'Error checking session.' };
+    }
+  }
+};
+
 const PROVIDERS = {
   chatgpt: {
     label: 'ChatGPT',
     icon: 'images/providers/chatgpt.svg',
     baseUrl: 'https://chatgpt.com',
     iframeUrl: 'https://chatgpt.com/chat',
-    authCheck: async () => {
-      try {
-        const res = await fetch('https://chatgpt.com/api/auth/session');
-        if (res.status === 403) {
-          return {
-            state: 'cloudflare',
-            message:
-              'Please login and pass Cloudflare at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a>'
-          };
-        }
-        const data = await res.json();
-        if (!res.ok || !data.accessToken) {
-          return {
-            state: 'unauthorized',
-            message:
-              'Please login at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a> first'
-          };
-        }
-        return { state: 'authorized' };
-      } catch (e) {
-        console.error('ChatGPT session check failed:', e);
-        return { state: 'error', message: 'Error checking session.' };
-      }
-    }
+    authCheck: () => AuthCheckers.chatgptAuth()
   },
   codex: {
     label: 'ChatGPT Codex',
     icon: 'images/providers/codex.svg',
     baseUrl: 'https://chatgpt.com/codex',
     iframeUrl: 'https://chatgpt.com/codex',
-    authCheck: async () => {
-      try {
-        const res = await fetch('https://chatgpt.com/api/auth/session');
-        if (res.status === 403) {
-          return { state: 'cloudflare', message: 'Please login and pass Cloudflare at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a>' };
-        }
-        const data = await res.json();
-        if (!res.ok || !data.accessToken) {
-          return { state: 'unauthorized', message: 'Please login at <a href="https://chatgpt.com" target="_blank" rel="noreferrer">chatgpt.com</a> first' };
-        }
-        return { state: 'authorized' };
-      } catch (e) {
-        console.error('ChatGPT session check failed:', e);
-        return { state: 'error', message: 'Error checking session.' };
-      }
-    }
+    authCheck: () => AuthCheckers.chatgptAuth()
   },
   perplexity: {
     label: 'Perplexity',
@@ -369,6 +358,8 @@ function deriveTitle(provider, url, rawTitle) {
     return [label || provider, shortId].filter(Boolean).join(' ');
   } catch (_) { return rawTitle || historyProviderLabel(provider) || provider || 'Conversation'; }
 }
+// clampTitle函数用于将传入的标题字符串s截断到最大长度max（默认是TITLE_MAX_LEN全局常量）以内，
+// 如果字符串长度超过max，会在末尾加上省略号“…”；如果发生异常则返回原始输入。
 function clampTitle(s, max = TITLE_MAX_LEN) {
   try {
     const str = String(s || '').trim();
@@ -376,6 +367,10 @@ function clampTitle(s, max = TITLE_MAX_LEN) {
     return str.slice(0, Math.max(0, max - 1)) + '…';
   } catch (_) { return s; }
 }
+
+// loadHistory是异步函数，用于加载历史会话数据（即AI聊天历史）。
+// 优先从window.HistoryDB（IndexedDB实现，较新且推荐的历史存储方案）获取，如果存在HistoryDB，则先尝试迁移从chrome.storage.local的老数据，再直接从HistoryDB获取所有历史记录。
+// 如果没有HistoryDB实现（比如还没升级数据），则降级回老的chrome.storage.local方式，读取HISTORY_KEY键对应的数据数组，不存在则返回空数组。
 async function loadHistory() {
   try {
     if (window.HistoryDB) {

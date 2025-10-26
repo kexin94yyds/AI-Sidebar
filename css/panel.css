@@ -8,12 +8,29 @@
 }
 
 :root {
-  /* SlashCommand-style blue palette */
-  --btn-blue-start: #5a84ff; /* top */
-  --btn-blue-end:   #436af7; /* bottom */
-  --btn-blue-border:#395fe0;
+  /* 统一的颜色变量 - 减少重复定义 */
+  --btn-blue-start: #5a84ff;
+  --btn-blue-end: #436af7;
+  --btn-blue-border: #395fe0;
   --btn-blue-shadow: rgba(67, 106, 247, 0.35);
-  --btn-text: #ffffff; /* set to #0f172a if you prefer dark text */
+  --btn-text: #ffffff;
+  
+  /* 通用颜色 */
+  --bg-white: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border-light: #e5e7eb;
+  --border-hover: #dbe1e8;
+  --bg-hover: #f3f7ff;
+  --bg-active: #e8f0fe;
+  --shadow-light: rgba(15, 23, 42, 0.08);
+  --shadow-medium: rgba(15, 23, 42, 0.18);
+  
+  /* 通用尺寸 */
+  --border-radius: 12px;
+  --border-radius-small: 8px;
+  --border-radius-full: 9999px;
+  --transition: all 0.2s ease;
 }
 
 body,
