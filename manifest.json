@@ -59,7 +59,10 @@
     "https://ssl.ptlogin2.qq.com/*",
     "https://xui.ptlogin2.qq.com/*",
     "https://attention-span-tracker.netlify.app/*",
-    "https://grok.com/*"
+    "https://grok.com/*",
+    "https://mubu.com/*",
+    "https://*.mubu.com/*",
+    "https://excalidraw.com/*"
   ],
 
   "content_scripts": [
@@ -92,7 +95,10 @@
         "https://ssl.ptlogin2.qq.com/*",
         "https://xui.ptlogin2.qq.com/*",
         "https://attention-span-tracker.netlify.app/*",
-        "https://grok.com/*"
+        "https://grok.com/*",
+        "https://mubu.com/*",
+        "https://*.mubu.com/*",
+        "https://excalidraw.com/*"
       ],
       "all_frames": true,
       "run_at": "document_end",

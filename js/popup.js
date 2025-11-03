@@ -131,6 +131,20 @@ const PROVIDERS = {
     baseUrl: 'vendor/attention/index.html',
     iframeUrl: 'vendor/attention/index.html',
     authCheck: null
+  },
+  mubu: {
+    label: '幕布',
+    icon: 'images/providers/mubu.png',
+    baseUrl: 'https://mubu.com',
+    iframeUrl: 'https://mubu.com/app/edit/home/5zT4WuoDoc0',
+    authCheck: null // 幕布通过网站处理登录
+  },
+  excalidraw: {
+    label: 'Excalidraw',
+    icon: 'images/providers/excalidraw.svg',
+    baseUrl: 'https://excalidraw.com',
+    iframeUrl: 'https://excalidraw.com/',
+    authCheck: null // Excalidraw 无需登录
   }
 };
 
@@ -273,7 +287,7 @@ const setStarShortcut = async (shortcut) => {
 // Button shortcuts management
 const defaultButtonShortcuts = {
   openInTab: { key: 'o', ctrl: true, shift: false, alt: false },
-  copyLink: { key: 'c', ctrl: true, shift: false, alt: false },
+  searchBtn: { key: 'f', ctrl: true, shift: true, alt: false },
   historyBtn: { key: 'h', ctrl: true, shift: false, alt: false },
   favoritesBtn: { key: 'l', ctrl: true, shift: false, alt: false }
 };
@@ -1373,7 +1387,6 @@ const initializeBar = async () => {
     const preferred = currentUrlByProvider[currentProviderKey] || mergedCurrent.baseUrl;
     openInTab.dataset.url = preferred;
     try { openInTab.title = preferred; } catch (_) {}
-    try { const b=document.getElementById('copyLink'); if (b) b.title = preferred; } catch (_) {}
     // 初始化星号按钮状态
     await updateStarButtonState();
 
@@ -1387,39 +1400,6 @@ const initializeBar = async () => {
     });
   }
 
-  // Copy current link button handler
-  try {
-    const copyBtn = document.getElementById('copyLink');
-    if (copyBtn) {
-      const computeUrl = () => {
-        try { const a = document.getElementById('openInTab'); if (a && a.dataset.url) return a.dataset.url; } catch (_) {}
-        return mergedCurrent.baseUrl;
-      };
-      copyBtn.addEventListener('click', async () => {
-        const text = computeUrl();
-        try {
-          await navigator.clipboard.writeText(text);
-          const old = copyBtn.textContent;
-          copyBtn.textContent = 'Copied';
-          setTimeout(() => { try { copyBtn.textContent = old; } catch (_) {} }, 1200);
-        } catch (e) {
-          try {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            const old = copyBtn.textContent;
-            copyBtn.textContent = 'Copied';
-            setTimeout(() => { try { copyBtn.textContent = old; } catch (_) {} }, 1200);
-          } catch (_) {}
-        }
-      });
-    }
-  } catch (_) {}
 
   // History button handler
   try {
@@ -1622,7 +1602,7 @@ const initializeBar = async () => {
         
         const shortcutRows = [
           { id: 'openInTab', label: 'Open in Tab', shortcut: buttonShortcuts.openInTab },
-          { id: 'copyLink', label: 'Copy Link', shortcut: buttonShortcuts.copyLink },
+          { id: 'searchBtn', label: 'Search', shortcut: buttonShortcuts.searchBtn },
           { id: 'historyBtn', label: 'History', shortcut: buttonShortcuts.historyBtn },
           { id: 'favoritesBtn', label: 'Starred', shortcut: buttonShortcuts.favoritesBtn },
           { id: 'star', label: 'Star Current Page', shortcut: starShortcut }
@@ -1694,6 +1674,20 @@ const initializeBar = async () => {
                 const updated = await getButtonShortcuts();
                 updated[shortcutId] = newShortcut;
                 await setButtonShortcuts(updated);
+                __buttonShortcuts = updated; // 更新全局缓存
+                
+                // 如果是搜索按钮，更新其title
+                if (shortcutId === 'searchBtn') {
+                  const searchBtn = document.getElementById('searchBtn');
+                  if (searchBtn) {
+                    const keys = [];
+                    if (newShortcut.ctrl) keys.push('Ctrl');
+                    if (newShortcut.shift) keys.push('Shift');
+                    if (newShortcut.alt) keys.push('Alt');
+                    keys.push(newShortcut.key.toUpperCase());
+                    searchBtn.title = `Search in page (${keys.join('+')})`;
+                  }
+                }
               }
               
               recordBtn.textContent = 'Change';
@@ -1829,10 +1823,10 @@ const initializeBar = async () => {
         return;
       }
       
-      // Check Copy Link
-      if (isShortcutMatch(__buttonShortcuts.copyLink)) {
+      // Check Search
+      if (isShortcutMatch(__buttonShortcuts.searchBtn)) {
         e.preventDefault();
-        const btn = document.getElementById('copyLink');
+        const btn = document.getElementById('searchBtn');
         if (btn) btn.click();
         return;
       }
@@ -1938,7 +1932,6 @@ try {
       if (openInTab && visible) {
         openInTab.dataset.url = data.href;
         try { openInTab.title = data.href; } catch (_) {}
-        try { const b=document.getElementById('copyLink'); if (b) b.title = data.href; } catch (_) {}
         // 更新星号按钮状态
         await updateStarButtonState();
       }
@@ -1956,3 +1949,246 @@ try {
 });
 
 initializeBar();
+
+// ============== 搜索功能 ==============
+(function initializeSearch() {
+  const searchBar = document.getElementById('searchBar');
+  const searchInput = document.getElementById('searchInput');
+  const searchPrev = document.getElementById('searchPrev');
+  const searchNext = document.getElementById('searchNext');
+  const searchClose = document.getElementById('searchClose');
+  const searchCount = document.getElementById('searchCount');
+  const searchBtn = document.getElementById('searchBtn');
+
+  let isSearchVisible = false;
+  let currentSearchTerm = '';
+
+  // 切换搜索框显示/隐藏
+  function toggleSearch() {
+    isSearchVisible = !isSearchVisible;
+    
+    if (isSearchVisible) {
+      searchBar.style.display = 'block';
+      searchInput.focus();
+      searchInput.select();
+      
+      // 高亮搜索按钮
+      if (searchBtn) {
+        searchBtn.classList.add('active');
+      }
+      
+      // 如果有之前的搜索词，重新搜索
+      if (searchInput.value) {
+        performSearch(searchInput.value);
+      }
+    } else {
+      searchBar.style.display = 'none';
+      clearSearch();
+      
+      // 取消高亮搜索按钮
+      if (searchBtn) {
+        searchBtn.classList.remove('active');
+      }
+    }
+  }
+
+  // 执行搜索
+  function performSearch(term, direction = '') {
+    if (!term) {
+      clearSearch();
+      return;
+    }
+
+    currentSearchTerm = term;
+
+    try {
+      // 获取当前激活的iframe
+      const iframeContainer = document.getElementById('iframe');
+      const activeFrame = iframeContainer?.querySelector('[data-provider]:not([style*="display: none"])');
+      
+      if (activeFrame) {
+        // 通过postMessage向iframe发送搜索请求
+        try {
+          activeFrame.contentWindow.postMessage({
+            type: 'AI_SIDEBAR_SEARCH',
+            action: direction === 'prev' ? 'findPrevious' : 'findNext',
+            term: term
+          }, '*');
+          
+          // 设置搜索状态
+          searchCount.textContent = '搜索中...';
+          searchInput.style.backgroundColor = '';
+          
+          // 如果3秒内没有响应，显示降级方案
+          setTimeout(() => {
+            if (searchCount.textContent === '搜索中...') {
+              tryNativeSearch(activeFrame, term, direction);
+            }
+          }, 500);
+        } catch (e) {
+          console.log('postMessage失败，尝试原生搜索:', e);
+          tryNativeSearch(activeFrame, term, direction);
+        }
+      }
+    } catch (e) {
+      console.error('搜索出错:', e);
+      searchCount.textContent = '搜索失败';
+    }
+  }
+  
+  // 尝试使用原生window.find
+  function tryNativeSearch(frame, term, direction) {
+    try {
+      const iframeWindow = frame.contentWindow;
+      
+      if (iframeWindow && iframeWindow.find) {
+        // 使用window.find API
+        const found = iframeWindow.find(
+          term,
+          false, // caseSensitive
+          direction === 'prev', // backwards
+          true, // wrapAround
+          false, // wholeWord
+          false, // searchInFrames
+          false  // showDialog
+        );
+        
+        if (found) {
+          searchCount.textContent = '已找到';
+          searchInput.style.backgroundColor = '';
+        } else {
+          searchCount.textContent = '未找到';
+          searchInput.style.backgroundColor = '#fff3cd';
+        }
+      } else {
+        // 无法使用window.find，显示提示
+        searchCount.textContent = '请使用 Cmd/Ctrl+F';
+      }
+    } catch (e) {
+      console.log('原生搜索失败:', e);
+      searchCount.textContent = '请使用 Cmd/Ctrl+F';
+    }
+  }
+  
+  // 监听来自iframe的搜索结果
+  window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'AI_SIDEBAR_SEARCH_RESULT') {
+      const { found, total, current } = event.data;
+      
+      if (found) {
+        if (total > 0) {
+          searchCount.textContent = `${current}/${total}`;
+        } else {
+          searchCount.textContent = '已找到';
+        }
+        searchInput.style.backgroundColor = '';
+      } else {
+        searchCount.textContent = '未找到';
+        searchInput.style.backgroundColor = '#fff3cd';
+      }
+    }
+  });
+
+
+  // 清除搜索
+  function clearSearch() {
+    currentSearchTerm = '';
+    searchCount.textContent = '';
+    searchInput.style.backgroundColor = '';
+    
+    try {
+      const iframeContainer = document.getElementById('iframe');
+      const activeFrame = iframeContainer?.querySelector('[data-provider]:not([style*="display: none"])');
+      
+      if (activeFrame && activeFrame.contentWindow) {
+        // 向iframe发送清除搜索的消息
+        try {
+          activeFrame.contentWindow.postMessage({
+            type: 'AI_SIDEBAR_SEARCH',
+            action: 'clear',
+            term: ''
+          }, '*');
+        } catch (_) {}
+        
+        // 尝试清除选择
+        try {
+          const selection = activeFrame.contentWindow.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      // 忽略跨域错误
+    }
+  }
+
+  // 监听 ESC 键关闭搜索
+  document.addEventListener('keydown', (e) => {
+    // ESC 关闭搜索
+    if (e.key === 'Escape' && isSearchVisible) {
+      toggleSearch();
+    }
+  });
+
+  // 搜索输入框事件
+  searchInput.addEventListener('input', (e) => {
+    const term = e.target.value;
+    if (term) {
+      performSearch(term);
+    } else {
+      clearSearch();
+    }
+  });
+
+  // Enter键搜索下一个
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        performSearch(searchInput.value, 'prev');
+      } else {
+        performSearch(searchInput.value, 'next');
+      }
+    }
+  });
+
+  // 上一个按钮
+  searchPrev.addEventListener('click', () => {
+    if (searchInput.value) {
+      performSearch(searchInput.value, 'prev');
+    }
+  });
+
+  // 下一个按钮
+  searchNext.addEventListener('click', () => {
+    if (searchInput.value) {
+      performSearch(searchInput.value, 'next');
+    }
+  });
+
+  // 关闭按钮
+  searchClose.addEventListener('click', () => {
+    toggleSearch();
+  });
+
+  // 工具栏搜索按钮
+  if (searchBtn) {
+    // 设置初始快捷键提示
+    getButtonShortcuts().then(shortcuts => {
+      const sc = shortcuts.searchBtn;
+      const keys = [];
+      if (sc.ctrl) keys.push('Ctrl');
+      if (sc.shift) keys.push('Shift');
+      if (sc.alt) keys.push('Alt');
+      keys.push(sc.key.toUpperCase());
+      searchBtn.title = `Search in page (${keys.join('+')})`;
+    });
+    
+    searchBtn.addEventListener('click', () => {
+      toggleSearch();
+    });
+  }
+
+  dbg('搜索功能已初始化');
+})();

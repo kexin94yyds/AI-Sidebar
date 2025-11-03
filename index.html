@@ -20,7 +20,7 @@
         <button id="starBtn" type="button" title="Star/Unstar current page">☆</button>
         <button id="openInTab" type="button" title="Open current page in a new tab">Open in Tab</button>
         <button id="favoritesBtn" type="button" title="View favorites">Favorites</button>
-        <button id="copyLink" type="button" title="Copy current link">Copy Link</button>
+        <button id="searchBtn" type="button" title="Search in page">🔍 Search</button>
         <button id="historyBtn" type="button" title="View saved links">History</button>
         <button id="settingsBtn" type="button" title="Keyboard shortcuts settings">Settings</button>
       </div>
@@ -30,6 +30,18 @@
       <div id="favoritesPanel" class="favorites-panel" style="display:none;"></div>
       <!-- Settings modal -->
       <div id="settingsModal" class="settings-modal" style="display:none;"></div>
+      <!-- Search bar -->
+      <div id="searchBar" class="search-bar" style="display:none;">
+        <div class="search-input-wrapper">
+          <input type="text" id="searchInput" placeholder="搜索聊天内容..." />
+          <div class="search-controls">
+            <button id="searchPrev" title="上一个">↑</button>
+            <button id="searchNext" title="下一个">↓</button>
+            <span id="searchCount" class="search-count"></span>
+            <button id="searchClose" title="关闭搜索 (Shift+Cmd+F)">✕</button>
+          </div>
+        </div>
+      </div>
       <div id="iframe"></div>
     </main>
     <script src="js/utils.js"></script>

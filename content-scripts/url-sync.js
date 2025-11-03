@@ -582,3 +582,194 @@
     });
   } catch (_) {}
 })();
+
+// ============== 页面内搜索功能 ==============
+(function initContentSearch() {
+  let currentSearchTerm = '';
+  let currentIndex = 0;
+  let totalMatches = 0;
+  let highlightedElements = [];
+  
+  // 监听来自sidebar的搜索请求
+  window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'AI_SIDEBAR_SEARCH') {
+      const { action, term } = event.data;
+      
+      if (action === 'findNext' || action === 'findPrevious') {
+        performSearch(term, action === 'findPrevious');
+      } else if (action === 'clear') {
+        clearHighlights();
+      }
+    }
+  });
+  
+  // 执行搜索
+  function performSearch(term, backwards = false) {
+    // 如果是新的搜索词，重新高亮
+    if (term !== currentSearchTerm) {
+      clearHighlights();
+      currentSearchTerm = term;
+      
+      if (term) {
+        highlightMatches(term);
+      }
+    }
+    
+    // 如果没有匹配项
+    if (totalMatches === 0) {
+      sendSearchResult(false, 0, 0);
+      return;
+    }
+    
+    // 导航到下一个/上一个匹配项
+    if (backwards) {
+      currentIndex--;
+      if (currentIndex < 0) currentIndex = totalMatches - 1;
+    } else {
+      currentIndex++;
+      if (currentIndex >= totalMatches) currentIndex = 0;
+    }
+    
+    // 滚动到当前匹配项
+    scrollToMatch(currentIndex);
+    
+    // 发送结果
+    sendSearchResult(true, totalMatches, currentIndex + 1);
+  }
+  
+  // 高亮所有匹配项
+  function highlightMatches(term) {
+    if (!term) return;
+    
+    const searchRegex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function(node) {
+          // 跳过脚本、样式等元素
+          if (node.parentElement) {
+            const tagName = node.parentElement.tagName.toUpperCase();
+            if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT'].includes(tagName)) {
+              return NodeFilter.FILTER_REJECT;
+            }
+          }
+          // 检查是否包含搜索词
+          if (searchRegex.test(node.textContent)) {
+            return NodeFilter.FILTER_ACCEPT;
+          }
+          return NodeFilter.FILTER_REJECT;
+        }
+      }
+    );
+    
+    const matchNodes = [];
+    let node;
+    
+    while (node = walker.nextNode()) {
+      matchNodes.push(node);
+    }
+    
+    // 高亮所有匹配的文本节点
+    matchNodes.forEach((textNode) => {
+      const text = textNode.textContent;
+      const matches = [...text.matchAll(searchRegex)];
+      
+      if (matches.length > 0) {
+        const parent = textNode.parentNode;
+        const fragment = document.createDocumentFragment();
+        let lastIndex = 0;
+        
+        matches.forEach((match) => {
+          const matchIndex = match.index;
+          
+          // 添加匹配前的文本
+          if (matchIndex > lastIndex) {
+            fragment.appendChild(document.createTextNode(text.slice(lastIndex, matchIndex)));
+          }
+          
+          // 创建高亮元素
+          const highlight = document.createElement('mark');
+          highlight.textContent = match[0];
+          highlight.className = 'ai-sidebar-search-highlight';
+          highlight.style.cssText = 'background-color: #ffeb3b; color: #000; padding: 0; margin: 0;';
+          fragment.appendChild(highlight);
+          highlightedElements.push(highlight);
+          
+          lastIndex = matchIndex + match[0].length;
+        });
+        
+        // 添加匹配后的文本
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+        
+        parent.replaceChild(fragment, textNode);
+      }
+    });
+    
+    totalMatches = highlightedElements.length;
+    
+    if (totalMatches > 0) {
+      currentIndex = 0;
+      highlightCurrentMatch();
+      sendSearchResult(true, totalMatches, currentIndex + 1);
+    } else {
+      sendSearchResult(false, 0, 0);
+    }
+  }
+  
+  // 高亮当前匹配项
+  function highlightCurrentMatch() {
+    // 清除之前的当前高亮
+    highlightedElements.forEach((el, idx) => {
+      if (idx === currentIndex) {
+        el.style.cssText = 'background-color: #ff9800; color: #000; padding: 0; margin: 0; outline: 2px solid #f57c00;';
+      } else {
+        el.style.cssText = 'background-color: #ffeb3b; color: #000; padding: 0; margin: 0;';
+      }
+    });
+  }
+  
+  // 滚动到匹配项
+  function scrollToMatch(index) {
+    if (index >= 0 && index < highlightedElements.length) {
+      const element = highlightedElements[index];
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      highlightCurrentMatch();
+    }
+  }
+  
+  // 清除高亮
+  function clearHighlights() {
+    highlightedElements.forEach(el => {
+      try {
+        const parent = el.parentNode;
+        if (parent) {
+          parent.replaceChild(document.createTextNode(el.textContent), el);
+          parent.normalize();
+        }
+      } catch (_) {}
+    });
+    highlightedElements = [];
+    totalMatches = 0;
+    currentIndex = 0;
+    currentSearchTerm = '';
+    
+    // 清除window.find的选择
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+    }
+  }
+  
+  // 发送搜索结果到sidebar
+  function sendSearchResult(found, total, current) {
+    window.parent.postMessage({
+      type: 'AI_SIDEBAR_SEARCH_RESULT',
+      found: found,
+      total: total,
+      current: current
+    }, '*');
+  }
+})();

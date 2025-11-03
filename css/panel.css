@@ -313,6 +313,14 @@ html {
   color: #000000;
 }
 
+/* Search button - active state */
+.toolbar button#searchBtn.active {
+  background: linear-gradient(135deg, var(--btn-blue-start), var(--btn-blue-end));
+  border-color: var(--btn-blue-border);
+  color: #ffffff;
+  box-shadow: 0 4px 14px var(--btn-blue-shadow);
+}
+
 /* History dropdown panel */
 .history-panel {
   position: absolute;
@@ -828,4 +836,101 @@ html {
   font-size: 13px;
   color: #0369a1;
   margin-top: 12px;
+}
+
+/* 搜索栏样式 */
+.search-bar {
+  position: absolute;
+  top: 56px; /* 在工具栏下方 */
+  left: 8px;
+  right: 8px;
+  z-index: 99999;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.12);
+  padding: 12px;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#searchInput {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #dbe1e8;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+#searchInput:focus {
+  border-color: var(--btn-blue-start);
+  box-shadow: 0 0 0 3px rgba(90, 132, 255, 0.1);
+}
+
+.search-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-controls button {
+  padding: 6px 10px;
+  border: 1px solid #dbe1e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-controls button:hover {
+  background: var(--bg-hover);
+  border-color: var(--btn-blue-start);
+}
+
+.search-controls button:active {
+  background: var(--bg-active);
+}
+
+#searchClose {
+  color: #64748b;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+#searchClose:hover {
+  color: #ef4444;
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.search-count {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
 }

@@ -28,7 +28,10 @@ const DNR_CONFIG = {
     "https://chat.deepseek.com/*",
     "https://ima.qq.com/*",
     "https://*.ptlogin2.qq.com/*",
-    "https://www.google.com/*"
+    "https://www.google.com/*",
+    "https://mubu.com/*",
+    "https://*.mubu.com/*",
+    "https://excalidraw.com/*"
   ]
 };
 
