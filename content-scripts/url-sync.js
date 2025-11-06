@@ -773,3 +773,349 @@
     }, '*');
   }
 })();
+
+// ============== 从侧边栏注入提示文本 ==============
+(function initPromptInjection() {
+  function isVisible(el) {
+    try {
+      if (!el) return false;
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    } catch (_) { return false; }
+  }
+  function candidateScore(el) {
+    try {
+      const r = el.getBoundingClientRect();
+      // Prefer elements near bottom and wider
+      const vpH = window.innerHeight || 800;
+      const bottomBias = Math.max(0, r.top) / Math.max(1, vpH);
+      const size = Math.min(r.width * r.height, 1e6);
+      const role = (el.getAttribute && (el.getAttribute('role')||'')).toLowerCase();
+      const isTextRole = role === 'textbox' || role === 'combobox';
+      const tag = (el.tagName||'').toLowerCase();
+      const tagScore = (tag === 'textarea') ? 2 : (isTextRole ? 1.5 : 1);
+      return size * (0.5 + bottomBias) * tagScore;
+    } catch (_) { return 0; }
+  }
+  function findPromptElement() {
+    try {
+      const els = [];
+      // Common inputs
+      els.push(...document.querySelectorAll('textarea'));
+      els.push(...document.querySelectorAll('div[contenteditable="true"]'));
+      els.push(...document.querySelectorAll('[role="textbox"], [aria-label*="prompt" i], [data-testid*="prompt" i], [data-testid*="textbox" i]'));
+      // Filter visible and enabled
+      const cand = els.filter((el)=> isVisible(el) && !el.disabled);
+      if (!cand.length) return null;
+      cand.sort((a,b)=> candidateScore(b) - candidateScore(a));
+      return cand[0] || null;
+    } catch (_) { return null; }
+  }
+  function placeCaretAtEnd(el) {
+    try {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (_) {}
+  }
+  function setElementText(el, text, mode = 'append') {
+    try {
+      const val = String(text || '');
+      const tag = (el.tagName||'').toLowerCase();
+      const doAppend = (mode !== 'replace');
+      if (tag === 'textarea' || (el.value !== undefined && typeof el.value === 'string')) {
+        el.focus();
+        const cur = String(el.value || '');
+        const sep = doAppend && cur && !/\n\s*$/.test(cur) ? '\n' : '';
+        const next = doAppend ? (cur + sep + val) : val;
+        el.value = next;
+        try { el.selectionStart = el.selectionEnd = next.length; } catch(_) {}
+        try { el.scrollTop = el.scrollHeight; } catch(_) {}
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, data: val }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }
+      if (el.isContentEditable || (el.getAttribute && el.getAttribute('contenteditable') === 'true')) {
+        el.focus();
+        if (!doAppend) {
+          try { el.innerHTML = ''; } catch (_) {}
+        } else {
+          // Move caret to end for appending
+          placeCaretAtEnd(el);
+        }
+        let insertText = val;
+        try {
+          const endsWithNL = /\n\s*$/.test(String(el.innerText || ''));
+          if (doAppend && (el.innerText || el.textContent || '').length > 0 && !endsWithNL) {
+            insertText = '\n' + insertText;
+          }
+        } catch (_) {}
+        // Prefer execCommand for better site compatibility
+        let ok = false;
+        try { ok = document.execCommand('insertText', false, insertText); } catch (_) { ok = false; }
+        if (!ok) {
+          try { ok = document.execCommand('insertHTML', false, insertText.replace(/\n/g, '<br>')); } catch (_) { ok = false; }
+        }
+        if (!ok) {
+          try { el.appendChild(document.createTextNode(insertText)); } catch (_) {}
+        }
+        placeCaretAtEnd(el);
+        try { el.lastChild && el.lastChild.scrollIntoView({ block: 'nearest' }); } catch(_) {}
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, data: insertText }));
+        return true;
+      }
+      // last resort
+      try { el.focus(); } catch (_) {}
+      try { el.textContent = doAppend ? (String(el.textContent||'') + (String(el.textContent||'').endsWith('\n') ? '' : '\n') + val) : val; } catch (_) {}
+      try { el.value = doAppend ? (String(el.value||'') + (String(el.value||'').endsWith('\n') ? '' : '\n') + val) : val; } catch (_) {}
+      return true;
+    } catch (_) { return false; }
+  }
+
+  window.addEventListener('message', (event) => {
+    try {
+      const data = event.data || {};
+      if (!data || (data.type !== 'AI_SIDEBAR_INSERT' && data.type !== 'AI_SIDEBAR_FOCUS')) return;
+      const el = findPromptElement();
+      if (!el) return;
+      if (data.type === 'AI_SIDEBAR_INSERT') {
+        setElementText(el, data.text || '', data.mode || 'append');
+        if (data.focus !== false) { try { el.focus(); placeCaretAtEnd(el); } catch (_) {} }
+      } else if (data.type === 'AI_SIDEBAR_FOCUS') {
+        try { el.focus(); placeCaretAtEnd(el); } catch (_) {}
+      }
+    } catch (_) {}
+  });
+  
+  // 代理键入：从左侧页面捕获键盘并注入当前输入框
+  window.addEventListener('message', (event) => {
+    try {
+      const data = event.data || {};
+      if (!data || data.type !== 'AI_SIDEBAR_PROXY_TYPE') return;
+      const el = findPromptElement();
+      if (!el) return;
+      const payload = data.payload || {};
+      if (payload.kind === 'text' && typeof payload.text === 'string') {
+        setElementText(el, payload.text, 'append');
+        try { el.focus(); placeCaretAtEnd(el); } catch (_) {}
+      } else if (payload.kind === 'newline') {
+        setElementText(el, '\n', 'append');
+        try { el.focus(); placeCaretAtEnd(el); } catch (_) {}
+      } else if (payload.kind === 'submit') {
+        try {
+          el.focus(); placeCaretAtEnd(el);
+        } catch (_) {}
+        // Provider-specific send button attempts
+        try {
+          const candidates = [
+            // ChatGPT
+            'button[data-testid="send-button"]:not([disabled])',
+            'button[aria-label*="Send"]:not([disabled])',
+            // Claude
+            'button[type="submit"]:not([disabled])',
+            'button[aria-label*="发送"]:not([disabled])',
+            // Perplexity / Gemini (best-effort)
+            'button[aria-label*="send"]:not([disabled])',
+            'button[aria-label*="Send message"]:not([disabled])'
+          ];
+          let btn = null;
+          for (const sel of candidates) {
+            try { btn = document.querySelector(sel); } catch (_) { btn = null; }
+            if (btn) break;
+          }
+          if (btn) {
+            try { btn.click(); return; } catch (_) {}
+          }
+        } catch (_) {}
+        // Fallback: synthesize Enter key on element
+        try {
+          const evOpts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+          el.dispatchEvent(new KeyboardEvent('keydown', evOpts));
+          el.dispatchEvent(new KeyboardEvent('keypress', evOpts));
+          el.dispatchEvent(new KeyboardEvent('keyup', evOpts));
+        } catch (_) {}
+      } else if (payload.kind === 'backspace') {
+        try {
+          const tag = (el.tagName||'').toLowerCase();
+          if (tag === 'textarea' || (el.value !== undefined && typeof el.value === 'string')) {
+            el.focus();
+            const start = el.selectionStart ?? (el.value || '').length;
+            const end = el.selectionEnd ?? start;
+            let s = String(el.value || '');
+            if (start !== end) {
+              s = s.slice(0, start) + s.slice(end);
+              el.value = s; el.selectionStart = el.selectionEnd = start;
+            } else if (start > 0) {
+              s = s.slice(0, start - 1) + s.slice(end);
+              el.value = s; el.selectionStart = el.selectionEnd = start - 1;
+            }
+            el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+          } else {
+            el.focus();
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) { placeCaretAtEnd(el); }
+            try { sel.modify && sel.modify('extend', 'backward', 'character'); } catch (_) {}
+            try { document.execCommand('delete'); } catch (_) {}
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  });
+
+  // ============== 图片插入功能 ==============
+  // 处理来自侧边栏的截图插入请求
+  window.addEventListener('message', async (event) => {
+    try {
+      const data = event.data || {};
+      if (!data || data.type !== 'AI_SIDEBAR_INSERT_IMAGE') return;
+      
+      const el = findPromptElement();
+      if (!el) {
+        console.warn('[AI Sidebar] 未找到输入框元素');
+        return;
+      }
+      
+      // 将 dataUrl 转换为 Blob
+      const dataUrl = data.dataUrl;
+      if (!dataUrl || typeof dataUrl !== 'string') return;
+      
+      try {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const file = new File([blob], 'screenshot.png', { type: 'image/png' });
+        
+        // 尝试多种方式插入图片
+        let success = false;
+        
+        // 方法1: 模拟粘贴事件 (最通用的方法，ChatGPT/Claude/Gemini 都支持)
+        try {
+          const clipboardData = new DataTransfer();
+          clipboardData.items.add(file);
+          
+          const pasteEvent = new ClipboardEvent('paste', {
+            bubbles: true,
+            cancelable: true,
+            clipboardData: clipboardData
+          });
+          
+          // 先聚焦输入框
+          el.focus();
+          
+          // 触发粘贴事件在输入框上
+          if (el.dispatchEvent(pasteEvent)) {
+            success = true;
+            console.log('[AI Sidebar] 图片通过粘贴事件插入成功');
+          }
+          
+          // 有些网站在 document 级别监听粘贴
+          if (!success) {
+            document.dispatchEvent(pasteEvent);
+            success = true;
+            console.log('[AI Sidebar] 图片通过 document 粘贴事件插入成功');
+          }
+        } catch (e) {
+          console.warn('[AI Sidebar] 粘贴事件失败:', e);
+        }
+        
+        // 方法2: 模拟拖放事件
+        if (!success) {
+          try {
+            const dropZone = findDropZone();
+            if (dropZone) {
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(file);
+              
+              // 触发拖放事件序列
+              ['dragenter', 'dragover', 'drop'].forEach(eventType => {
+                const event = new DragEvent(eventType, {
+                  bubbles: true,
+                  cancelable: true,
+                  dataTransfer: dataTransfer
+                });
+                dropZone.dispatchEvent(event);
+              });
+              
+              success = true;
+              console.log('[AI Sidebar] 图片通过拖放事件插入成功');
+            }
+          } catch (e) {
+            console.warn('[AI Sidebar] 拖放事件失败:', e);
+          }
+        }
+        
+        // 方法3: 查找并触发文件上传按钮
+        if (!success) {
+          try {
+            const uploadInput = findUploadInput();
+            if (uploadInput) {
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(file);
+              uploadInput.files = dataTransfer.files;
+              
+              uploadInput.dispatchEvent(new Event('change', { bubbles: true }));
+              success = true;
+              console.log('[AI Sidebar] 图片通过文件上传按钮插入成功');
+            }
+          } catch (e) {
+            console.warn('[AI Sidebar] 文件上传失败:', e);
+          }
+        }
+        
+        if (success) {
+          // 聚焦输入框
+          try { el.focus(); placeCaretAtEnd(el); } catch (_) {}
+        } else {
+          console.warn('[AI Sidebar] 所有图片插入方法均失败');
+        }
+        
+      } catch (e) {
+        console.error('[AI Sidebar] 图片处理失败:', e);
+      }
+    } catch (_) {}
+  });
+
+  // 查找拖放区域
+  function findDropZone() {
+    // ChatGPT 的主内容区域
+    const chatgptMain = document.querySelector('main') || document.querySelector('[role="main"]');
+    if (chatgptMain) return chatgptMain;
+    
+    // Claude 的输入区域
+    const claudeInput = document.querySelector('[contenteditable="true"]');
+    if (claudeInput) return claudeInput;
+    
+    // Gemini 的输入区域
+    const geminiInput = document.querySelector('.ql-editor');
+    if (geminiInput) return geminiInput;
+    
+    // 通用：查找输入框的父容器
+    const promptEl = findPromptElement();
+    if (promptEl && promptEl.parentElement) return promptEl.parentElement;
+    
+    // 最后降级到 body
+    return document.body;
+  }
+
+  // 查找文件上传输入框
+  function findUploadInput() {
+    // 常见的文件上传 input 选择器
+    const selectors = [
+      'input[type="file"][accept*="image"]',
+      'input[type="file"]',
+      'input[name="file"]',
+      'input[name="upload"]'
+    ];
+    
+    for (const selector of selectors) {
+      const input = document.querySelector(selector);
+      if (input) return input;
+    }
+    
+    return null;
+  }
+})();

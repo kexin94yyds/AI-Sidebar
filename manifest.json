@@ -8,10 +8,12 @@
     "declarativeNetRequest",
     "declarativeNetRequestWithHostAccess",
     "tabs",
+    "activeTab",
     "storage",
     "cookies",
     "identity",
-    "scripting"
+    "scripting",
+    "contextMenus"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -116,5 +118,21 @@
         "path": "rules/bypass-headers.json"
       }
     ]
+  },
+  "commands": {
+    "aisb-send-selection": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Send selected text to AI sidebar"
+    },
+    "aisb-capture-screenshot": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Capture current tab screenshot to side panel"
+    }
   }
 }

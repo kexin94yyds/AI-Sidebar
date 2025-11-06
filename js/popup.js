@@ -1950,6 +1950,157 @@ try {
 
 initializeBar();
 
+// ============== 来自后台的消息与待处理队列 ==============
+(function initRuntimeMessages() {
+  function getActiveProviderFrame() {
+    try {
+      const iframeContainer = document.getElementById('iframe');
+      const el = iframeContainer?.querySelector('[data-provider]:not([style*="display: none"])');
+      return el || null;
+    } catch (_) { return null; }
+  }
+
+  function toast(text, level = 'info') {
+    try {
+      let box = document.getElementById('aisb-toast');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'aisb-toast';
+        box.style.cssText = 'position:fixed;right:12px;top:12px;z-index:2147483647;background:#111827;color:#fff;padding:8px 12px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.2);font-size:12px;max-width:60%;opacity:.98;';
+        document.body.appendChild(box);
+      }
+      box.textContent = String(text || '');
+      box.style.background = level === 'error' ? '#b91c1c' : (level === 'warn' ? '#92400e' : '#111827');
+      box.style.display = 'block';
+      clearTimeout(toast._t);
+      toast._t = setTimeout(()=>{ try { box.style.display = 'none'; } catch (_) {} }, 2200);
+    } catch (_) {}
+  }
+
+  async function handlePendingFromStorage() {
+    try {
+      const { aisbPendingInsert, aisbPendingScreenshot, aisbPendingNotify } = await chrome.storage?.local.get(['aisbPendingInsert','aisbPendingScreenshot','aisbPendingNotify']);
+      if (aisbPendingNotify && aisbPendingNotify.text) {
+        toast(aisbPendingNotify.text, aisbPendingNotify.level || 'info');
+        try { await chrome.storage?.local.remove(['aisbPendingNotify']); } catch (_) {}
+      }
+      if (aisbPendingInsert && aisbPendingInsert.text) {
+        routeInsertText(aisbPendingInsert);
+        try { await chrome.storage?.local.remove(['aisbPendingInsert']); } catch (_) {}
+      }
+      if (aisbPendingScreenshot && aisbPendingScreenshot.dataUrl) {
+        showScreenshotOverlay(aisbPendingScreenshot);
+        try { await chrome.storage?.local.remove(['aisbPendingScreenshot']); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  function routeInsertText(msg) {
+    try {
+      const target = getActiveProviderFrame();
+      if (!target || !target.contentWindow) {
+        toast('未找到活动的 AI 面板。', 'warn');
+        return;
+      }
+      // 尽量把焦点转入侧栏与 iframe
+      try { window.focus(); } catch (_) {}
+      try { document.body.tabIndex = -1; document.body.focus(); } catch (_) {}
+      try { target.focus(); } catch (_) {}
+      try { target.contentWindow.focus(); } catch (_) {}
+      // 追加并要求聚焦
+      target.contentWindow.postMessage({ type: 'AI_SIDEBAR_INSERT', text: msg.text || '', mode: 'append', focus: true }, '*');
+
+      // 多次尝试确保焦点最终在输入框（处理面板刚打开或站点懒加载）
+      const pokeFocus = () => {
+        try {
+          target.focus();
+          target.contentWindow?.postMessage({ type: 'AI_SIDEBAR_FOCUS' }, '*');
+        } catch (_) {}
+      };
+      const attempts = [40, 120, 240, 420, 700];
+      attempts.forEach((ms)=> setTimeout(pokeFocus, ms));
+      toast('已将选中文本注入输入框');
+    } catch (e) {
+      toast('注入失败：' + String(e), 'error');
+    }
+  }
+
+  function showScreenshotOverlay(msg) {
+    try {
+      // 直接将截图发送到活动的 iframe 中
+      const target = getActiveProviderFrame();
+      if (!target || !target.contentWindow) {
+        toast('未找到活动的 AI 面板', 'warn');
+        return;
+      }
+      
+      // 发送截图数据到 iframe
+      target.contentWindow.postMessage({
+        type: 'AI_SIDEBAR_INSERT_IMAGE',
+        dataUrl: msg.dataUrl,
+        tabTitle: msg.tabTitle || '',
+        tabUrl: msg.tabUrl || ''
+      }, '*');
+      
+      toast('截图已加载到输入框');
+      
+      // 聚焦到 iframe
+      try { window.focus(); } catch (_) {}
+      try { document.body.tabIndex = -1; document.body.focus(); } catch (_) {}
+      try { target.focus(); } catch (_) {}
+      try { target.contentWindow.focus(); } catch (_) {}
+    } catch (e) {
+      toast('加载截图失败：' + String(e), 'error');
+    }
+  }
+
+  // Receive from background in real time
+  try {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      try {
+        if (!message || !message.type) return;
+        if (message.type === 'aisb.notify') {
+          toast(message.text || '', message.level || 'info');
+          return;
+        }
+        if (message.type === 'aisb.insert-text') {
+          routeInsertText(message);
+          return;
+        }
+        if (message.type === 'aisb.focus-only') {
+          const target = getActiveProviderFrame();
+          if (target && target.contentWindow) {
+            try { window.focus(); } catch (_) {}
+            try { document.body.tabIndex = -1; document.body.focus(); } catch (_) {}
+            try { target.focus(); } catch (_) {}
+            try { target.contentWindow.focus(); } catch (_) {}
+            try { target.contentWindow.postMessage({ type: 'AI_SIDEBAR_FOCUS' }, '*'); } catch (_) {}
+            const poke = () => { try { target.focus(); target.contentWindow?.postMessage({ type: 'AI_SIDEBAR_FOCUS' }, '*'); } catch (_) {} };
+            ;[40,120,240,420,700,1000].forEach(ms => setTimeout(poke, ms));
+          }
+          return;
+        }
+        if (message.type === 'aisb.receive-screenshot') {
+          showScreenshotOverlay(message);
+          return;
+        }
+        if (message.type === 'aisb.type-proxy') {
+          const target = getActiveProviderFrame();
+          if (target && target.contentWindow) {
+            try { target.focus(); } catch (_) {}
+            try { target.contentWindow.focus(); } catch (_) {}
+            target.contentWindow.postMessage({ type: 'AI_SIDEBAR_PROXY_TYPE', payload: message.payload || {} }, '*');
+          }
+          return;
+        }
+      } catch (_) {}
+    });
+  } catch (_) {}
+
+  // Drain any pending payloads saved in storage (when panel was closed)
+  handlePendingFromStorage();
+})();
+
 // ============== 搜索功能 ==============
 (function initializeSearch() {
   const searchBar = document.getElementById('searchBar');

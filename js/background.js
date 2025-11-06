@@ -64,14 +64,17 @@ function applyBaseDnrRules() {
 
 chrome.runtime.onInstalled.addListener(() => {
   applyBaseDnrRules();
+  try { setupContextMenus(); } catch (_) {}
 });
 
 chrome.runtime.onStartup.addListener(() => {
   applyBaseDnrRules();
+  try { setupContextMenus(); } catch (_) {}
 });
 
 // Also apply immediately when the service worker (re)starts
 applyBaseDnrRules();
+try { setupContextMenus(); } catch (_) {}
 
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
@@ -233,5 +236,289 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   })();
   return true; // keep channel open for async sendResponse
 });
+
+// ---------------- Selection to AI + Screenshot shortcuts ----------------
+async function getActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab || null;
+}
+
+function originFromUrl(u) {
+  try { return new URL(u).origin + '/*'; } catch (_) { return null; }
+}
+
+async function ensureHostPermissionFor(url) {
+  try {
+    const origin = originFromUrl(url);
+    if (!origin) return false;
+    const has = await chrome.permissions.contains({ origins: [origin] });
+    if (has) return true;
+    // Request runtime optional host permission for this origin
+    const ok = await chrome.permissions.request({ origins: [origin] });
+    return !!ok;
+  } catch (e) {
+    console.warn('ensureHostPermissionFor failed', e);
+    return false;
+  }
+}
+
+async function readSelectionFromTab(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: () => {
+        try {
+          // Return plain text selection and a best-effort HTML snippet
+          const sel = window.getSelection && window.getSelection();
+          const text = sel ? String(sel.toString() || '') : '';
+          let html = '';
+          try {
+            if (sel && sel.rangeCount) {
+              const range = sel.getRangeAt(0).cloneContents();
+              const div = document.createElement('div');
+              div.appendChild(range);
+              html = div.innerHTML;
+            }
+          } catch (_) {}
+          return { ok: true, text, html };
+        } catch (e) {
+          return { ok: false, error: String(e) };
+        }
+      }
+    });
+    // Pick the longest non-empty selection among frames
+    let best = { text: '', html: '' };
+    for (const r of results || []) {
+      const v = r && r.result;
+      if (v && v.ok && typeof v.text === 'string') {
+        const t = v.text.trim();
+        if (t && t.length > best.text.length) best = { text: t, html: String(v.html || '') };
+      }
+    }
+    return best;
+  } catch (e) {
+    console.warn('readSelectionFromTab failed', e);
+    return { text: '', html: '' };
+  }
+}
+
+async function openSidePanelForCurrentWindow() {
+  try {
+    const win = await chrome.windows.getCurrent();
+    if (win && typeof chrome.sidePanel.open === 'function') {
+      await chrome.sidePanel.open({ windowId: win.id });
+    }
+  } catch (e) {
+    // non-fatal
+  }
+}
+
+async function deliverToSidePanel(message, fallbackKey) {
+  try {
+    // Send directly; if no listener, keep a pending payload in storage
+    let responded = false;
+    try {
+      await new Promise((resolve) => {
+        chrome.runtime.sendMessage(message, () => {
+          responded = true;
+          resolve();
+        });
+      });
+    } catch (_) {}
+    if (!responded && fallbackKey) {
+      const obj = {}; obj[fallbackKey] = message;
+      await chrome.storage.local.set(obj);
+    }
+  } catch (e) {
+    console.warn('deliverToSidePanel failed', e);
+  }
+}
+
+async function handleSendSelection() {
+  const tab = await getActiveTab();
+  if (!tab || !tab.id || !tab.url) return;
+  // 尝试直接读取（依赖 activeTab 临时授权），失败时给出回退提示
+  let text = '', html = '';
+  try {
+    const res = await readSelectionFromTab(tab.id);
+    text = res.text || '';
+    html = res.html || '';
+  } catch (e) {
+    // ignore
+  }
+  await openSidePanelForCurrentWindow();
+  // give the panel a brief moment to mount listeners
+  try { await new Promise(r=> setTimeout(r, 80)); } catch(_) {}
+  if (!text) {
+    // 通知 + 强制聚焦（即使未读取到选区，也要启用键入代理）
+    await deliverToSidePanel({ type: 'aisb.notify', level: 'info', text: '未能读取选中文本。可改用“右键菜单 → 发送选中文本”，无需授权。' }, 'aisbPendingNotify');
+    await deliverToSidePanel({ type: 'aisb.focus-only' }, null);
+  } else {
+    const payload = {
+      type: 'aisb.insert-text',
+      text,
+      html,
+      tabId: tab.id,
+      tabTitle: tab.title || '',
+      tabUrl: tab.url || ''
+    };
+    await deliverToSidePanel(payload, 'aisbPendingInsert');
+  }
+  // 无论是否读取到选区，均安装临时键入代理
+  try { await installTypingRelay(tab.id); } catch (_) {}
+}
+
+async function handleCaptureScreenshot() {
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab(undefined, { format: 'png' });
+    if (!dataUrl) return;
+    const tab = await getActiveTab();
+    const payload = {
+      type: 'aisb.receive-screenshot',
+      dataUrl,
+      tabId: tab?.id,
+      tabTitle: tab?.title || '',
+      tabUrl: tab?.url || '',
+      createdAt: Date.now()
+    };
+    await deliverToSidePanel(payload, 'aisbPendingScreenshot');
+    await openSidePanelForCurrentWindow();
+  } catch (e) {
+    await deliverToSidePanel({ type: 'aisb.notify', level: 'error', text: '截屏失败：' + String(e) }, 'aisbPendingNotify');
+    await openSidePanelForCurrentWindow();
+  }
+}
+
+try {
+  chrome.commands.onCommand.addListener((cmd) => {
+    if (cmd === 'aisb-send-selection') {
+      handleSendSelection();
+    } else if (cmd === 'aisb-capture-screenshot') {
+      handleCaptureScreenshot();
+    }
+  });
+} catch (_) {}
+
+// Temporarily relay typing from the page to the side panel input
+async function installTypingRelay(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        try {
+          if (window.__AISB_TYPE_PROXY && window.__AISB_TYPE_PROXY.stop) {
+            window.__AISB_TYPE_PROXY.stop();
+          }
+          const relay = {};
+          let timer = null;
+          const TTL = 2500; // ms after last key
+          const send = (payload) => {
+            try { chrome.runtime.sendMessage({ type: 'aisb.type-proxy', payload }); } catch (_) {}
+          };
+          const prolong = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => relay.stop(), TTL);
+          };
+          const onKeyDown = (e) => {
+            try {
+              const k = e.key;
+              const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
+
+              // Always handle Enter/Backspace even if Cmd/Ctrl is still held
+              // (accounts for sticky meta right after the shortcut)
+              if (k === 'Backspace') {
+                e.preventDefault(); e.stopPropagation();
+                send({ kind: 'backspace' });
+                prolong();
+                return;
+              }
+              if (k === 'Enter') {
+                e.preventDefault(); e.stopPropagation();
+                // Cmd/Ctrl+Enter -> submit；否则换行
+                send({ kind: (hasModifier ? 'submit' : 'newline') });
+                prolong();
+                return;
+              }
+
+              // For other keys, allow system/site shortcuts to pass through
+              if (hasModifier) return;
+
+              if (k && k.length === 1) {
+                // Printable
+                e.preventDefault(); e.stopPropagation();
+                send({ kind: 'text', text: k });
+                prolong();
+              }
+            } catch (_) {}
+          };
+          const onPaste = (e) => {
+            try {
+              const dt = e.clipboardData || window.clipboardData;
+              if (!dt) return;
+              const t = dt.getData('text');
+              if (t) {
+                e.preventDefault(); e.stopPropagation();
+                send({ kind: 'text', text: t });
+                prolong();
+              }
+            } catch (_) {}
+          };
+          document.addEventListener('keydown', onKeyDown, true);
+          document.addEventListener('paste', onPaste, true);
+          relay.stop = () => {
+            try { document.removeEventListener('keydown', onKeyDown, true); } catch (_) {}
+            try { document.removeEventListener('paste', onPaste, true); } catch (_) {}
+            clearTimeout(timer);
+          };
+          window.__AISB_TYPE_PROXY = relay;
+          prolong();
+        } catch (_) {}
+      }
+    });
+  } catch (_) {
+    // ignore
+  }
+}
+
+// ---------------- Context Menu (no extra host permission needed) ----------------
+function setupContextMenus() {
+  try {
+    chrome.contextMenus.removeAll(() => {
+      try {
+        chrome.contextMenus.create({
+          id: 'aisb-send-selection',
+          title: '发送选中文本到侧边栏',
+          contexts: ['selection']
+        });
+      } catch (_) {}
+    });
+  } catch (_) {}
+  try {
+    chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+      try {
+        if (info.menuItemId !== 'aisb-send-selection') return;
+        const text = String(info.selectionText || '').trim();
+        if (!text) {
+          await deliverToSidePanel({ type: 'aisb.notify', level: 'info', text: '未检测到文字选中内容。' }, 'aisbPendingNotify');
+          await openSidePanelForCurrentWindow();
+          return;
+        }
+        const payload = {
+          type: 'aisb.insert-text',
+          text,
+          html: '',
+          tabId: tab?.id,
+          tabTitle: tab?.title || '',
+          tabUrl: tab?.url || ''
+        };
+        await deliverToSidePanel(payload, 'aisbPendingInsert');
+        await openSidePanelForCurrentWindow();
+      } catch (e) {
+        console.warn('contextMenus onClicked failed', e);
+      }
+    });
+  } catch (_) {}
+}
 
  
