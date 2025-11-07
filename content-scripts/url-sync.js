@@ -1119,3 +1119,37 @@
     return null;
   }
 })();
+
+// ============== 选区发送到输入框（右侧面板内） ==============
+(function enableSelectionToPrompt() {
+  try {
+    // 主动请求：从上层侧栏请求当前 frame 返回选区
+    window.addEventListener('message', (event) => {
+      try {
+        const data = event.data || {};
+        if (!data || data.type !== 'AI_SIDEBAR_REQUEST_SELECTION') return;
+        const sel = window.getSelection && window.getSelection();
+        const text = sel ? String(sel.toString() || '').trim() : '';
+        try { window.parent.postMessage({ type: 'AI_SIDEBAR_SELECTION_RESULT', text }, '*'); } catch (_) {}
+      } catch (_) {}
+    });
+    
+    // 快捷键：Cmd/Ctrl+Shift+Y 将选区直接追加到输入框
+    document.addEventListener('keydown', (e) => {
+      try {
+        const isY = (e.key === 'y' || e.key === 'Y');
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && isY) {
+          const sel = window.getSelection && window.getSelection();
+          const text = sel ? String(sel.toString() || '').trim() : '';
+          if (!text) return;
+          e.preventDefault(); e.stopPropagation();
+          const el = (typeof findPromptElement === 'function') ? findPromptElement() : null;
+          if (!el) return;
+          (typeof setElementText === 'function') && setElementText(el, text, 'append');
+          try { el.focus && el.focus(); } catch (_) {}
+          (typeof placeCaretAtEnd === 'function') && placeCaretAtEnd(el);
+        }
+      } catch (_) {}
+    }, true);
+  } catch (_) {}
+})(); 

@@ -2067,6 +2067,32 @@ initializeBar();
           routeInsertText(message);
           return;
         }
+        // 当后台未能从左侧活动页读取到选区时，请求右侧当前 iframe 自行上报选区并注入
+        if (message.type === 'aisb.request-frame-selection') {
+          const target = getActiveProviderFrame();
+          if (!target || !target.contentWindow) {
+            toast('未找到活动的 AI 面板。', 'warn');
+            return;
+          }
+          // 一次性监听 selection 结果
+          const onMsg = (ev) => {
+            try {
+              const data = ev.data || {};
+              if (data && data.type === 'AI_SIDEBAR_SELECTION_RESULT') {
+                window.removeEventListener('message', onMsg, true);
+                const txt = String(data.text || '').trim();
+                if (txt) {
+                  routeInsertText({ text: txt });
+                } else {
+                  toast('未检测到选区，可用“右键菜单 → 发送选中文本”，无需授权。', 'warn');
+                }
+              }
+            } catch (_) {}
+          };
+          window.addEventListener('message', onMsg, true);
+          try { target.contentWindow.postMessage({ type: 'AI_SIDEBAR_REQUEST_SELECTION' }, '*'); } catch (_) {}
+          return;
+        }
         if (message.type === 'aisb.focus-only') {
           const target = getActiveProviderFrame();
           if (target && target.contentWindow) {

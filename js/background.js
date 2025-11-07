@@ -350,8 +350,8 @@ async function handleSendSelection() {
   // give the panel a brief moment to mount listeners
   try { await new Promise(r=> setTimeout(r, 80)); } catch(_) {}
   if (!text) {
-    // 通知 + 强制聚焦（即使未读取到选区，也要启用键入代理）
-    await deliverToSidePanel({ type: 'aisb.notify', level: 'info', text: '未能读取选中文本。可改用“右键菜单 → 发送选中文本”，无需授权。' }, 'aisbPendingNotify');
+    // 若左侧活动页没有选区，尝试让右侧面板主动从其当前 iframe 读取选区
+    await deliverToSidePanel({ type: 'aisb.request-frame-selection' }, null);
     await deliverToSidePanel({ type: 'aisb.focus-only' }, null);
   } else {
     const payload = {
