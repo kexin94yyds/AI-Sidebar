@@ -24,3 +24,6 @@ dist-ssr
 *.local
 \n+# Chrome unpacked extension: disallow underscore-prefixed system dir
 _metadata/
+
+# Sync data files (contain user's personal browsing history and favorites)
+sync/*.json

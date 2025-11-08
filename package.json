@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc",
     "lint": "eslint . --ext js,ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync-server": "node sync-server.js",
+    "sync": "node sync-server.js"
   },
   "dependencies": {
     "react": "^18.2.0",

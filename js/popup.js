@@ -1950,6 +1950,19 @@ try {
 
 initializeBar();
 
+// ============== 自动同步到 sync/*.json ==============
+(function initAutoSync() {
+  // 启用自动同步（如果 AutoSync 模块可用且同步服务器运行中）
+  if (typeof AutoSync !== 'undefined') {
+    try {
+      AutoSync.enableAutoSync();
+      console.log('AutoSync: 自动同步已启用');
+    } catch (e) {
+      console.log('AutoSync: 同步服务器未运行，跳过自动同步');
+    }
+  }
+})();
+
 // ============== 来自后台的消息与待处理队列 ==============
 (function initRuntimeMessages() {
   function getActiveProviderFrame() {

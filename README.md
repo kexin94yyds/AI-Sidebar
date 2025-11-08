@@ -66,6 +66,30 @@ AI Sidebar 是一个功能完整的 Chrome 扩展程序，让你无需切换标�
 - **DNR 规则** - 使用声明式网络请求规则绕过 CSP 和 X-Frame-Options
 - **主机权限管理** - 动态管理和请求必要的主机权限
 
+### 🔄 数据同步 (新功能!)
+- **自动同步** - 历史记录和收藏自动同步到本地 JSON 文件
+- **跨应用共享** - 与 Electron 应用或其他工具无缝共享数据
+- **实时更新** - 每分钟自动同步，保持数据最新
+- **本地服务器** - 简单的 HTTP 服务器接收扩展数据
+- **零配置** - 开箱即用，无需复杂设置
+
+#### 快速启动同步
+```bash
+# 启动同步服务器
+npm run sync
+
+# 服务器将在 http://localhost:3456 运行
+# 扩展会自动检测并开始同步数据
+```
+
+📚 详细文档：
+- [快速启动指南](./QUICK_START_SYNC.md) - 3 分钟快速开始
+- [完整同步指南](./SYNC_GUIDE.md) - 详细配置和故障排除
+
+同步后的数据保存在 `sync/` 目录：
+- `sync/history.json` - 历史记录
+- `sync/favorites.json` - 收藏
+
 ## 🏗️ 项目结构
 
 ```
@@ -75,7 +99,10 @@ AI-Sidebar/
 ├── js/
 │   ├── popup.js                       # 主应用逻辑（UI、提供商管理、事件处理）
 │   ├── background.js                  # 后台服务工作线程
-│   ├── history-db.js                  # 历史记录数据库管理
+│   ├── history-db.js                  # 历史记录数据库管理（IndexedDB）
+│   ├── auto-sync.js                   # 自动同步模块（新）
+│   ├── sync-to-file.js                # 手动导出脚本（新）
+│   ├── utils.js                       # 工具函数
 │   └── plugins/                       # 插件系统目录
 ├── css/
 │   └── panel.css                      # 样式表（布局、主题、响应式设计）
@@ -89,6 +116,9 @@ AI-Sidebar/
 │       └── dark/                      # 暗色主题图标
 ├── rules/
 │   └── bypass-headers.json            # DNR 规则（绕过限制性请求头）
+├── sync/                              # 同步数据目录（新）
+│   ├── history.json                   # 历史记录同步文件
+│   └── favorites.json                 # 收藏同步文件
 ├── vendor/
 │   ├── attention/                     # Attention Tracker 生产力工具
 │   │   ├── index.html                # 生产力工具界面
@@ -99,8 +129,11 @@ AI-Sidebar/
 │   ├── Slash-Command-Prompter/       # 斜杠命令提示器
 │   │   └── content.js                # 命令菜单逻辑
 │   └── supabase.js                   # 共享 Supabase 配置
+├── sync-server.js                     # 本地同步服务器（新）
 ├── _metadata/                        # 生成的元数据和索引
 └── [文档文件]                        # 更新日志和指南
+    ├── SYNC_GUIDE.md                 # 完整同步指南（新）
+    └── QUICK_START_SYNC.md           # 快速启动指南（新）
 ```
 
 ## 🔧 技术架构
