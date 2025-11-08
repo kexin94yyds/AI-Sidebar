@@ -76,17 +76,49 @@ const AutoSync = (function() {
       // 检查服务器是否可用
       const available = await checkServerAvailability();
       if (!available) {
+        console.warn('AutoSync: History 同步跳过 - 服务器不可用');
         return { success: false, reason: 'server_unavailable' };
       }
 
       // 获取历史数据
       let historyData = [];
-      if (window.HistoryDB) {
-        await window.HistoryDB.migrateFromStorageIfAny();
-        historyData = await window.HistoryDB.getAll();
+      
+      // 优先从 IndexedDB (HistoryDB) 读取
+      if (typeof window !== 'undefined' && window.HistoryDB) {
+        try {
+          console.log('AutoSync: 从 IndexedDB 读取 History...');
+          await window.HistoryDB.migrateFromStorageIfAny();
+          historyData = await window.HistoryDB.getAll();
+          console.log(`AutoSync: 从 IndexedDB 读取到 ${historyData.length} 条历史记录`);
+        } catch (dbError) {
+          console.warn('AutoSync: IndexedDB 读取失败，尝试降级到 chrome.storage:', dbError);
+          // 降级到 chrome.storage.local
+          if (typeof chrome !== 'undefined' && chrome.storage) {
+            const res = await chrome.storage.local.get([HISTORY_KEY]);
+            historyData = Array.isArray(res[HISTORY_KEY]) ? res[HISTORY_KEY] : [];
+            console.log(`AutoSync: 从 chrome.storage 读取到 ${historyData.length} 条历史记录`);
+          }
+        }
       } else if (typeof chrome !== 'undefined' && chrome.storage) {
+        // 如果没有 HistoryDB，直接使用 chrome.storage.local
+        console.log('AutoSync: HistoryDB 不可用，从 chrome.storage 读取...');
         const res = await chrome.storage.local.get([HISTORY_KEY]);
         historyData = Array.isArray(res[HISTORY_KEY]) ? res[HISTORY_KEY] : [];
+        console.log(`AutoSync: 从 chrome.storage 读取到 ${historyData.length} 条历史记录`);
+      } else {
+        console.warn('AutoSync: 无法读取 History - HistoryDB 和 chrome.storage 都不可用');
+        return { success: false, error: 'no_storage_available' };
+      }
+
+      // 检查是否有数据
+      if (!Array.isArray(historyData) || historyData.length === 0) {
+        console.warn('AutoSync: History 数据为空，跳过同步');
+        // 即使为空也发送，让服务器知道当前状态
+        const result = await sendToServer('/sync/history', []);
+        if (result.success) {
+          console.log('AutoSync: History 同步成功 (0 条 - 空数据)');
+        }
+        return result;
       }
 
       // 格式化数据
@@ -97,15 +129,20 @@ const AutoSync = (function() {
         time: Number(entry.time || Date.now())
       }));
 
+      console.log(`AutoSync: 准备同步 ${formatted.length} 条历史记录...`);
+
       // 发送到服务器
       const result = await sendToServer('/sync/history', formatted);
       if (result.success) {
         console.log(`AutoSync: History 同步成功 (${formatted.length} 条)`);
+      } else {
+        console.error('AutoSync: History 同步失败:', result.error || '未知错误');
       }
       return result;
 
     } catch (error) {
       console.error('AutoSync: History 同步失败:', error);
+      console.error('AutoSync: 错误详情:', error.stack);
       return { success: false, error: error.message };
     }
   }
@@ -171,6 +208,31 @@ const AutoSync = (function() {
   function enableAutoSync() {
     console.log('AutoSync: 已启用自动同步');
 
+    // 等待 HistoryDB 初始化后再进行初次同步
+    async function waitForHistoryDBAndSync() {
+      const maxWait = 5000; // 最多等待 5 秒
+      const startTime = Date.now();
+      
+      while (Date.now() - startTime < maxWait) {
+        if (typeof window !== 'undefined' && window.HistoryDB) {
+          try {
+            // 尝试调用一次确保完全初始化
+            await window.HistoryDB.migrateFromStorageIfAny();
+            console.log('AutoSync: HistoryDB 已就绪，开始初次同步');
+            await syncAll();
+            return;
+          } catch (e) {
+            // 继续等待
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // 超时后仍然尝试同步（使用降级方案）
+      console.warn('AutoSync: HistoryDB 初始化超时，使用降级方案进行初次同步');
+      await syncAll();
+    }
+
     // 定期同步（每分钟）
     setInterval(async () => {
       const available = await checkServerAvailability();
@@ -179,8 +241,8 @@ const AutoSync = (function() {
       }
     }, 60000); // 60秒
 
-    // 初次同步
-    setTimeout(() => syncAll(), 2000);
+    // 初次同步（等待 HistoryDB 初始化）
+    waitForHistoryDBAndSync();
   }
 
   // 公开 API

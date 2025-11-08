@@ -1952,13 +1952,40 @@ initializeBar();
 
 // ============== 自动同步到 sync/*.json ==============
 (function initAutoSync() {
+  // 等待 HistoryDB 初始化完成
+  async function waitForHistoryDB(maxWait = 5000) {
+    const startTime = Date.now();
+    while (Date.now() - startTime < maxWait) {
+      if (typeof window !== 'undefined' && window.HistoryDB) {
+        // 尝试调用一次确保完全初始化
+        try {
+          await window.HistoryDB.migrateFromStorageIfAny();
+          return true;
+        } catch (e) {
+          // 继续等待
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return typeof window !== 'undefined' && window.HistoryDB;
+  }
+
   // 启用自动同步（如果 AutoSync 模块可用且同步服务器运行中）
   if (typeof AutoSync !== 'undefined') {
     try {
+      // 等待 HistoryDB 初始化
+      waitForHistoryDB().then(ready => {
+        if (ready) {
+          console.log('AutoSync: HistoryDB 已就绪');
+        } else {
+          console.warn('AutoSync: HistoryDB 初始化超时，将使用降级方案');
+        }
+      });
+
       AutoSync.enableAutoSync();
       console.log('AutoSync: 自动同步已启用');
     } catch (e) {
-      console.log('AutoSync: 同步服务器未运行，跳过自动同步');
+      console.log('AutoSync: 同步服务器未运行，跳过自动同步', e);
     }
   }
 })();
