@@ -502,7 +502,10 @@ async function renderHistoryPanel() {
       const isStarred = favSet.has(normalizeUrlForMatch(it.url));
       const starClass = isStarred ? 'hp-star active' : 'hp-star';
       const starTitle = isStarred ? 'Unstar' : 'Star';
-      return `<div class="hp-item" data-url="${escapeAttr(it.url)}">
+      const rawTitleForData = (it && typeof it.title === 'string' && it.title.trim())
+        ? it.title.trim()
+        : titleToShow;
+      return `<div class="hp-item" data-url="${escapeAttr(it.url)}" data-provider="${escapeAttr(it.provider || '')}" data-title="${escapeAttr(rawTitleForData)}">
         <span class="hp-provider">${historyProviderLabel(it.provider||'')}</span>
         <span class="hp-title" data-url="${escapeAttr(it.url)}" title="${escTitle}">${escTitle}</span>
         <span class="hp-time">${ds}</span>
@@ -611,17 +614,23 @@ async function renderHistoryPanel() {
       btn.addEventListener('click', async (e)=>{
         e.stopPropagation(); // Prevent event bubbling
         const url = e.currentTarget.getAttribute('data-url');
+        const row = e.currentTarget.closest('.hp-item');
+        const rowProvider = row ? row.getAttribute('data-provider') : null;
+        const rowTitleAttr = row ? row.getAttribute('data-title') : null;
+        const rowTitleText = row ? (row.querySelector('.hp-title')?.textContent || '') : '';
         const isActive = e.currentTarget.classList.contains('active');
-        const provider = (await getProvider())||'chatgpt';
+        const provider = (rowProvider && rowProvider.trim()) || (await getProvider()) || 'chatgpt';
         const normalizedUrl = normalizeUrlForMatch(url);
         if (isActive) {
           // Unstar
           const favs = await loadFavorites();
           await saveFavorites(favs.filter((x)=> normalizeUrlForMatch(x.url) !== normalizedUrl));
         } else {
-          // Star - no inline edit, just add to favorites silently
-          const suggested = (currentTitleByProvider[provider] || document.title || '').trim();
-          await addFavorite({ url, provider, title: suggested, needsTitle: false });
+          // Star - use the history item's own title when available
+          const baseTitle = (rowTitleAttr || rowTitleText || '').trim();
+          const suggested = baseTitle || (currentTitleByProvider[provider] || document.title || '').trim();
+          // needsTitle: true here means "preserve the supplied title" (no inline rename)
+          await addFavorite({ url, provider, title: suggested, needsTitle: true });
         }
         // Update history panel to show new star state
         renderHistoryPanel();

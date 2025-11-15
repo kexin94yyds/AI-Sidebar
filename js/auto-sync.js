@@ -68,6 +68,47 @@ const AutoSync = (function() {
     }
   }
 
+  // 从同步服务器获取当前的数据（history/favorites）
+  async function fetchRemoteData(name) {
+    try {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const signal = controller ? AbortSignal.timeout(3000) : undefined;
+      const res = await fetch(`${SYNC_SERVER_URL}/sync/${name}`, {
+        method: 'GET',
+        signal
+      });
+      if (!res.ok) throw new Error(`GET /sync/${name} -> ${res.status}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.warn(`AutoSync: 无法获取远端 ${name}:`, error.message || error);
+      return [];
+    }
+  }
+
+  function mergeEntries(remoteList, localList) {
+    const map = new Map();
+    const addAll = (arr) => {
+      (arr || []).forEach((entry) => {
+        if (!entry || !entry.url) return;
+        const url = String(entry.url);
+        const normalized = {
+          url,
+          provider: String(entry.provider || ''),
+          title: String(entry.title || ''),
+          time: Number(entry.time || Date.now())
+        };
+        const prev = map.get(url);
+        if (!prev || (normalized.time || 0) >= (prev.time || 0)) {
+          map.set(url, normalized);
+        }
+      });
+    };
+    addAll(remoteList);
+    addAll(localList);
+    return Array.from(map.values()).sort((a, b) => (b.time || 0) - (a.time || 0));
+  }
+
   /**
    * 同步历史记录
    */
@@ -108,6 +149,21 @@ const AutoSync = (function() {
       } else {
         console.warn('AutoSync: 无法读取 History - HistoryDB 和 chrome.storage 都不可用');
         return { success: false, error: 'no_storage_available' };
+      }
+
+      // 与远端合并，避免覆盖 AI 应用写入的历史
+      const remoteHistory = await fetchRemoteData('history');
+      historyData = mergeEntries(remoteHistory, historyData);
+
+      // 将合并后的数据写回本地（IndexedDB 或 chrome.storage）
+      try {
+        if (typeof window !== 'undefined' && window.HistoryDB && window.HistoryDB.replace) {
+          await window.HistoryDB.replace(historyData);
+        } else if (typeof chrome !== 'undefined' && chrome.storage) {
+          await chrome.storage.local.set({ [HISTORY_KEY]: historyData });
+        }
+      } catch (e) {
+        console.warn('AutoSync: 合并历史后写回本地失败:', e);
       }
 
       // 检查是否有数据
@@ -163,6 +219,17 @@ const AutoSync = (function() {
       if (typeof chrome !== 'undefined' && chrome.storage) {
         const res = await chrome.storage.local.get([FAVORITES_KEY]);
         favoritesData = Array.isArray(res[FAVORITES_KEY]) ? res[FAVORITES_KEY] : [];
+      }
+
+      const remoteFavorites = await fetchRemoteData('favorites');
+      favoritesData = mergeEntries(remoteFavorites, favoritesData);
+
+      try {
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          await chrome.storage.local.set({ [FAVORITES_KEY]: favoritesData });
+        }
+      } catch (e) {
+        console.warn('AutoSync: 合并收藏后写回本地失败:', e);
       }
 
       // 格式化数据
@@ -259,4 +326,3 @@ const AutoSync = (function() {
 if (typeof window !== 'undefined') {
   window.AutoSync = AutoSync;
 }
-
